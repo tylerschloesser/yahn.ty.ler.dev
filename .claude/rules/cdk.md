@@ -33,7 +33,7 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
   not of the policy, so both stay. Both paths are proven — `deploy.yml` and `pr-preview.yml` have
   each assumed the role.
 - **`YahnSharedStack` exists so previews never wait on certificate issuance** — 160s to issue,
-  against a preview that is supposed to be about six minutes end to end.
+  measured, against a preview that is six minutes end to end.
 - **The certificate ARN is hard-coded in `bin/app.ts`.** An `Fn::ImportValue` would couple every
   preview to the shared stack and block deleting a preview while the export is in use; SSM would
   put an untested dynamic reference inside CloudFront's `ViewerCertificate`. Recreating the
@@ -45,8 +45,7 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
 ## Conventions
 
 - ESM + `nodenext`: **relative imports here carry `.js` extensions** even though the sources are
-  `.ts`, because the app runs through `tsx`. This is the **one** package in the repo that does;
-  every other uses `.ts`. See `.claude/rules/typescript-config.md`.
+  `.ts`, because the app runs through `tsx`. The **one** package in the repo that does.
 - `AppStack` reads `apps/web/dist` and throws if it is missing, so **`pnpm build` runs before any
   `synth`, `deploy` or `destroy`** — including `pr-teardown.yml`'s destroy, which synthesizes the
   app like any other CDK command.
@@ -70,7 +69,10 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
 3. **SPA fallback is a CloudFront Function on the default behavior**, not distribution-wide
    `errorResponses`. Custom error responses apply to *every* behavior, so a 404 from `/api/*`
    would come back as the HTML shell with status 200. The function only rewrites URIs containing
-   no `.`, so a genuinely missing asset still 404s.
+   no `.`, so a missing asset still fails rather than silently returning the shell — but
+   **measured, it fails 403, not 404**: an OAC bucket policy grants `s3:GetObject` and not
+   `s3:ListBucket`, and without `ListBucket` S3 answers a missing key `AccessDenied`. The
+   property that matters holds; the status code inherited from thai's rule file did not.
 4. **The API lives inside the app stack, not its own.** `FunctionUrlOrigin.withOriginAccessControl`
    adds a resource policy scoped to the distribution's ARN, so splitting them is a cycle.
 
@@ -98,9 +100,9 @@ worker here, which is also why nothing goes in `apps/web/public/` that might be 
 
 `pr-preview.yml` (open/synchronize/reopen) → `pr-teardown.yml` (close) → `cleanup.yml` (daily).
 
-Measured on the first real run: create ~6 min (the CloudFront distribution is ~4 of it, and it
-is the only resource still pending at the end), destroy ~4 min. A repeat preview deploy on the
-same PR is much faster — only the distribution's first creation is slow.
+Measured on the first real run: create ~6 min, destroy ~4 min. The CloudFront distribution is
+~4 of the 6 and is the only resource still pending at the end, so a *repeat* deploy to an
+existing preview is far quicker — only its first creation is slow.
 
 - **`cancel-in-progress: false` on `pr-preview.yml` is load-bearing.** Cancelling the job does
   not cancel the CloudFormation deploy it started; the next push would then find the stack in
@@ -114,23 +116,20 @@ same PR is much faster — only the distribution's first creation is slow.
   record existed caches the NXDOMAIN. `dig` bypasses that cache and will disagree with `curl`
   and Playwright. Confirm with `curl --resolve pr-<N>.yahn.ty.ler.dev:443:<ip>` before believing
   a local failure is the preview's fault.
-- **`cleanup.yml` is the only scheduled thing that deletes, and it has three independent guards.**
-  Two are in the workflow — the `YahnAppStack-pr-` prefix filter and an anchored `^[0-9]+$` on
-  what follows it, which together reject `YahnAppStack-prod` (no trailing hyphen) *and*
-  `YahnAppStack-pr-x`. The third is IAM, and it is the one that matters: the deploy role's
-  `cloudformation:DeleteStack` is scoped to `stack/YahnAppStack-pr-*`, so a bug in that shell
-  loop still cannot reach `YahnAppStack-prod` or `ThaiLerDevSiteStack`. Verified by
-  `aws iam simulate-principal-policy` rather than by deleting anything — `pr-1` allowed,
-  everything else `implicitDeny`; re-run that simulation rather than trusting this line.
-  **None may be loosened.** It uses raw `delete-stack` rather than CDK: the list comes from AWS,
-  not from the app, and the stack's own `autoDeleteObjects` custom resource runs either way.
-- **The deploy role's permissions are not just `sts:AssumeRole`, and the exception is deliberate.**
-  `cdk deploy`/`destroy` assume the CDK bootstrap roles, so they need nothing else — but
-  `cleanup.yml` calls CloudFormation *directly as this role*, which is why the role also carries
-  `ListStacks` (on `*`; the action supports no resource-level permissions) and the scoped
-  `DescribeStacks`/`DeleteStack` above. Its first scheduled-style run failed with
-  `AccessDenied ... cloudformation:ListStacks` for exactly this reason. `YahnGithubOidcStack`
-  deploys **locally**, so granting this is a hand deploy, never a workflow.
+- **`cleanup.yml` is the only scheduled thing that deletes, and three guards stand between its
+  cron and the rest of the account.** Two are in the workflow: the `YahnAppStack-pr-` prefix and
+  an anchored `^[0-9]+$` on what follows it, which together reject `YahnAppStack-prod` (no
+  trailing hyphen) *and* `YahnAppStack-pr-x`. The third is IAM, and it is the one that matters
+  because it survives a rewrite of that shell loop: the deploy role's
+  `cloudformation:DeleteStack` is scoped to `stack/YahnAppStack-pr-*`. Re-check with
+  `aws iam simulate-principal-policy` rather than trusting this line — `pr-1` allowed, every
+  other stack `implicitDeny`. **None may be loosened.**
+- **That scope is also why the deploy role is not only `sts:AssumeRole`.** `cdk deploy`/`destroy`
+  assume the CDK bootstrap roles and need nothing more, but `cleanup.yml` calls CloudFormation
+  *directly as this role* — its stack list comes from AWS, not from the app — so the role also
+  carries `ListStacks` (on `*`; the action takes no resource-level permissions). Its first run
+  failed `AccessDenied ... cloudformation:ListStacks` for exactly this. Widening it means a
+  **local** hand deploy of `YahnGithubOidcStack`, never a workflow.
 - Fork PRs get no preview, and that is correct: GitHub will not grant `id-token: write` to a fork
   PR, so the deploy could not authenticate. Both PR workflows carry the same explicit guard.
 

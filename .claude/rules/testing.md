@@ -37,5 +37,10 @@ fast, cheap, offline feedback loop on the one thing that can be subtly wrong.
   `pnpm dev` itself via `webServer` and tests `localhost`. Set it — `PLAYWRIGHT_BASE_URL=https://pr-123.yahn.ty.ler.dev pnpm e2e` — and the identical spec runs against a
   deployed preview with no server of its own. Keep any new spec runnable both ways; anything
   that only works locally belongs in vitest instead.
+- **You rarely need to run the preview target by hand: `pr-preview.yml` already does**, after a
+  gate that waits for `/api/health`. If you do run it locally and get `ERR_NAME_NOT_RESOLVED`,
+  suspect your own resolver before the deploy — one that was asked for `pr-<N>` *before* the
+  record existed caches the NXDOMAIN, and `dig` bypasses that cache so it will disagree.
+  `curl --resolve pr-<N>.yahn.ty.ler.dev:443:<ip>` settles it. See `.claude/rules/cdk.md`.
 - `expect.timeout` is raised above Playwright's default because live HN, not a fixture, is the
   origin behind every assertion on a cold cache.
