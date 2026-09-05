@@ -20,7 +20,15 @@ export function timeAgo(unixSeconds: number): string {
   return formatter.format(-diffSeconds, 'second')
 }
 
-/** "1 comment", "0 comments" — HN's own wording, and it does pluralize. */
+/**
+ * "1 comment", "0 comments" — HN's own wording, and it does pluralize.
+ * Handles the one irregular shape this app's nouns need: a consonant before
+ * a trailing "y" swaps to "ies" ("reply" → "replies") rather than just
+ * appending "s" ("replys"). Nouns ending in a vowel + "y" ("day") are regular
+ * and fall through to the plain "s" case.
+ */
 export function pluralize(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`
+  if (count === 1) return `${count} ${noun}`
+  const plural = /[^aeiou]y$/i.test(noun) ? `${noun.slice(0, -1)}ies` : `${noun}s`
+  return `${count} ${plural}`
 }

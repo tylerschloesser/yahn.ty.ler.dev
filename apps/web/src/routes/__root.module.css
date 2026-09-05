@@ -40,8 +40,57 @@
 .navItem {
   font-size: var(--text-2);
   color: var(--color-accent-solid-text);
-  cursor: default;
+  text-decoration: none;
+  border-radius: var(--radius-1);
   opacity: 0.75;
+}
+
+.navItem:hover {
+  text-decoration: underline;
+}
+
+/* The global ring is orange-8, which vanishes against the orange bar. */
+.navItem:focus-visible {
+  outline-color: var(--color-focus-ring-on-accent);
+}
+
+.navItem[data-active] {
+  font-weight: var(--weight-semibold);
+  opacity: 1;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+/* Visually hidden, not `display: none` — the input still needs an accessible name. */
+.searchLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip-path: inset(50%);
+}
+
+.searchInput {
+  width: 12rem;
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--text-2);
+  color: var(--color-text-strong);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-1);
+}
+
+/* The global ring is orange-8, which vanishes against the orange bar. */
+.searchInput:focus-visible {
+  outline-color: var(--color-focus-ring-on-accent);
 }
 
 .main {

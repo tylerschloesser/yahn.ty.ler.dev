@@ -10,11 +10,54 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AskRouteImport } from './routes/ask'
+import { Route as BestRouteImport } from './routes/best'
+import { Route as JobsRouteImport } from './routes/jobs'
+import { Route as NewestRouteImport } from './routes/newest'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as ShowRouteImport } from './routes/show'
+import { Route as ItemIndexRouteImport } from './routes/item.index'
 import { Route as ItemIdRouteImport } from './routes/item.$id'
+import { Route as UserIdRouteImport } from './routes/user.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AskRoute = AskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BestRoute = BestRouteImport.update({
+  id: '/best',
+  path: '/best',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewestRoute = NewestRouteImport.update({
+  id: '/newest',
+  path: '/newest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShowRoute = ShowRouteImport.update({
+  id: '/show',
+  path: '/show',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ItemIndexRoute = ItemIndexRouteImport.update({
+  id: '/item/',
+  path: '/item/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ItemIdRoute = ItemIdRouteImport.update({
@@ -22,31 +65,99 @@ const ItemIdRoute = ItemIdRouteImport.update({
   path: '/item/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UserIdRoute = UserIdRouteImport.update({
+  id: '/user/$id',
+  path: '/user/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
+  '/best': typeof BestRoute
+  '/jobs': typeof JobsRoute
+  '/newest': typeof NewestRoute
+  '/search': typeof SearchRoute
+  '/show': typeof ShowRoute
   '/item/$id': typeof ItemIdRoute
+  '/user/$id': typeof UserIdRoute
+  '/item/': typeof ItemIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
+  '/best': typeof BestRoute
+  '/jobs': typeof JobsRoute
+  '/newest': typeof NewestRoute
+  '/search': typeof SearchRoute
+  '/show': typeof ShowRoute
   '/item/$id': typeof ItemIdRoute
+  '/user/$id': typeof UserIdRoute
+  '/item': typeof ItemIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
+  '/best': typeof BestRoute
+  '/jobs': typeof JobsRoute
+  '/newest': typeof NewestRoute
+  '/search': typeof SearchRoute
+  '/show': typeof ShowRoute
   '/item/$id': typeof ItemIdRoute
+  '/user/$id': typeof UserIdRoute
+  '/item/': typeof ItemIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/item/$id'
+  fullPaths:
+    | '/'
+    | '/ask'
+    | '/best'
+    | '/jobs'
+    | '/newest'
+    | '/search'
+    | '/show'
+    | '/item/$id'
+    | '/user/$id'
+    | '/item/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/item/$id'
-  id: '__root__' | '/' | '/item/$id'
+  to:
+    | '/'
+    | '/ask'
+    | '/best'
+    | '/jobs'
+    | '/newest'
+    | '/search'
+    | '/show'
+    | '/item/$id'
+    | '/user/$id'
+    | '/item'
+  id:
+    | '__root__'
+    | '/'
+    | '/ask'
+    | '/best'
+    | '/jobs'
+    | '/newest'
+    | '/search'
+    | '/show'
+    | '/item/$id'
+    | '/user/$id'
+    | '/item/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AskRoute: typeof AskRoute
+  BestRoute: typeof BestRoute
+  JobsRoute: typeof JobsRoute
+  NewestRoute: typeof NewestRoute
+  SearchRoute: typeof SearchRoute
+  ShowRoute: typeof ShowRoute
   ItemIdRoute: typeof ItemIdRoute
+  UserIdRoute: typeof UserIdRoute
+  ItemIndexRoute: typeof ItemIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,6 +169,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ask': {
+      id: '/ask'
+      path: '/ask'
+      fullPath: '/ask'
+      preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/best': {
+      id: '/best'
+      path: '/best'
+      fullPath: '/best'
+      preLoaderRoute: typeof BestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/newest': {
+      id: '/newest'
+      path: '/newest'
+      fullPath: '/newest'
+      preLoaderRoute: typeof NewestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/show': {
+      id: '/show'
+      path: '/show'
+      fullPath: '/show'
+      preLoaderRoute: typeof ShowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/item/': {
+      id: '/item/'
+      path: '/item'
+      fullPath: '/item/'
+      preLoaderRoute: typeof ItemIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/item/$id': {
       id: '/item/$id'
       path: '/item/$id'
@@ -65,12 +225,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ItemIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/user/$id': {
+      id: '/user/$id'
+      path: '/user/$id'
+      fullPath: '/user/$id'
+      preLoaderRoute: typeof UserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AskRoute: AskRoute,
+  BestRoute: BestRoute,
+  JobsRoute: JobsRoute,
+  NewestRoute: NewestRoute,
+  SearchRoute: SearchRoute,
+  ShowRoute: ShowRoute,
   ItemIdRoute: ItemIdRoute,
+  UserIdRoute: UserIdRoute,
+  ItemIndexRoute: ItemIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

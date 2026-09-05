@@ -60,6 +60,11 @@ model verifies, so the expensive model spends its context on judgment, not typin
   implementer's reasoning, and reports PASS/FAIL with evidence without fixing anything.
 - Keep the expensive model for decomposition, judgment calls, anything touching an invariant in
   a rule file, and review of the integrated diff.
+- A finding the current task should not absorb is neither fixed nor dropped: the **`file-issue`
+  skill** (`.claude/skills/`) files it and you carry on. `.claude/settings.json` allowlists the
+  read-only calls — `pnpm verify` and friends, `gh` reads, `aws` describes, `curl` against the
+  live site and localhost. Nothing destructive is on that list, and `cdk destroy` and
+  `delete-stack` are deliberately absent: the account also hosts thai.ler.dev's production.
 - Don't delegate a chunk smaller than its handoff, or one that only makes sense with the whole
   conversation in view.
 
@@ -74,7 +79,11 @@ an agent reading it literally will "fix" working code.
 - When something costs a debugging session and isn't obvious from the code, add it to the
   matching rule. If no rule fits, add one and a row to the table above.
 - Budgets: this file under 100 lines, each rule under about 120. `cdk.md` is the one deliberate
-  exception (~140) because it is the only rule covering two `paths` globs — `infra/cdk/**` and
-  `.github/workflows/**` — whose contents cross-reference constantly. Split it before growing it.
+  exception, now **~165**, because it is the only rule covering two `paths` globs —
+  `infra/cdk/**` and `.github/workflows/**` — whose contents cross-reference constantly. Epoch 3
+  raised the ceiling from 140 rather than splitting, deliberately: the obvious split puts the
+  preview lifecycle in a workflows rule, and a session editing `cleanup.yml` would then no longer
+  load the IAM scope and stack-naming facts that make that workflow safe. **The trigger to split
+  is a workflow section that stops referring to stack internals**, not a line count.
 - A claim about a third party's undocumented behaviour needs a way to re-check it, not just a
   date. `scripts/ordering-spike.mjs` is the pattern.

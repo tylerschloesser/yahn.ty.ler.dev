@@ -30,7 +30,7 @@ function StoryRow({ story, rank }: StoryRowProps) {
 
   return (
     <li data-testid="story" className={styles.row}>
-      <span className={styles.rank}>{rank}.</span>
+      <span data-testid="story-rank" className={styles.rank}>{rank}.</span>
       <div className={styles.content}>
         <div className={styles.titleLine}>
           {story.url ? (
@@ -51,7 +51,19 @@ function StoryRow({ story, rank }: StoryRowProps) {
         </div>
         <div className={styles.subtext}>
           {story.score !== null && <span data-testid="story-score">{pluralize(story.score, 'point')}</span>}
-          {story.by && <span>by {story.by}</span>}
+          {story.by && (
+            <span>
+              by{' '}
+              <Link
+                data-testid="story-author"
+                to="/user/$id"
+                params={{ id: story.by }}
+                className={styles.author}
+              >
+                {story.by}
+              </Link>
+            </span>
+          )}
           <time dateTime={iso}>{timeAgo(story.time)}</time>
           <Link data-testid="story-comments" to="/item/$id" params={{ id: story.id }} className={styles.comments}>
             {pluralize(commentCount, 'comment')}

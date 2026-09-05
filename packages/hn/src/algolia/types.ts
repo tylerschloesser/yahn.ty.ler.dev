@@ -91,3 +91,47 @@ export const AlgoliaSearchResponseSchema = z.looseObject({
 })
 
 export type AlgoliaSearchResponse = z.output<typeof AlgoliaSearchResponseSchema>
+
+/**
+ * A hit from `tags=author_X`, where stories and comments come back
+ * interleaved in one result set. Everything except `objectID` and
+ * `created_at_i` is `.nullish()` — measured, not defensive: a story hit
+ * omits `story_text` entirely on a link story (present only on a self post,
+ * where `url` is what's absent instead), and a comment hit has no
+ * `title`/`url`/`num_comments` at all. Same Algolia inconsistency
+ * `AlgoliaStoryHitSchema` already tolerates, on a different tag combination.
+ */
+export const AlgoliaAuthorHitSchema = z.looseObject({
+  objectID: z.string(),
+  created_at_i: z.number().int(),
+  _tags: z.array(z.string()).default([]),
+  title: z.string().nullish(),
+  url: z.string().nullish(),
+  author: z.string().nullish(),
+  points: z.number().int().nullish(),
+  story_text: z.string().nullish(),
+  comment_text: z.string().nullish(),
+  story_title: z.string().nullish(),
+  story_url: z.string().nullish(),
+  num_comments: z.number().int().nullish(),
+  parent_id: z.number().int().nullish(),
+  story_id: z.number().int().nullish(),
+  created_at: z.string().nullish(),
+  updated_at: z.string().nullish(),
+  children: z.array(z.number().int()).nullish(),
+})
+
+export type AlgoliaAuthorHit = z.output<typeof AlgoliaAuthorHitSchema>
+
+export const AlgoliaAuthorResponseSchema = z.looseObject({
+  hits: z.array(AlgoliaAuthorHitSchema),
+  page: z.number().int(),
+  nbHits: z.number().int(),
+  nbPages: z.number().int(),
+  hitsPerPage: z.number().int(),
+  processingTimeMS: z.number().int(),
+  query: z.string(),
+  params: z.string(),
+})
+
+export type AlgoliaAuthorResponse = z.output<typeof AlgoliaAuthorResponseSchema>

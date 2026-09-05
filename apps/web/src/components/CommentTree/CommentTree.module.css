@@ -20,13 +20,44 @@
 .meta {
   display: flex;
   gap: var(--space-2);
+  align-items: baseline;
   font-size: var(--text-1);
   color: var(--color-text);
+}
+
+/* Reset to look like text, not a button, while keeping the global
+   :focus-visible ring — see src/styles/base.css. */
+.toggle {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.deadMarker,
+.hiddenCount {
+  font-style: italic;
 }
 
 .author {
   font-weight: var(--weight-medium);
   color: var(--color-text-strong);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+.author:hover {
+  color: var(--color-accent-text);
+  text-decoration: underline;
 }
 
 .body {
@@ -54,5 +85,16 @@
   margin: 0;
   font-size: var(--text-3);
   font-style: italic;
+  color: var(--color-text);
+}
+
+/*
+ * `dead` keeps its author and body — HN still has them, dropping them would
+ * throw away content we already fetched — so it reads as dimmed rather than
+ * as an error. `--color-text` against `--color-text-strong` is the axis:
+ * the same one `.tombstoneText` above already uses, not a danger color.
+ */
+[data-tombstone='dead'] .author,
+[data-tombstone='dead'] .body {
   color: var(--color-text);
 }

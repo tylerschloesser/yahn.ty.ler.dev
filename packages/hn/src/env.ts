@@ -45,8 +45,24 @@ export const env = {
     return positiveInt('HN_HTTP_TIMEOUT_MS', 5000)
   },
 
+  /**
+   * In-flight Firebase requests per BFS level. This is the single biggest
+   * lever on how long a large thread takes, because the walk is one request
+   * per node and the levels are wide.
+   *
+   * **128 is measured, not guessed.** On thread 49563355 (1,603 nodes, depth
+   * 15) through the real API on 2026-09-05: 24 → 5.2s, 64 → 2.4s, 128 → 1.6s,
+   * 192 → 1.5s. The curve is flat past 128, so that is the knee. Every run
+   * returned the identical 1,603 nodes in the identical order with zero
+   * upstream errors, which is the part that matters — Firebase publishes no
+   * rate limit, and raising this does not change what the walk produces.
+   *
+   * This is why `.claude/rules/hn-data.md`'s cheaper-tree non-choice stays a
+   * non-choice: it would cut requests ~2.4x at the cost of a whole new source
+   * with Algolia's indexing lag in it, and this cuts wall clock 3.3x for free.
+   */
   get treeConcurrency(): number {
-    return positiveInt('HN_TREE_CONCURRENCY', 24)
+    return positiveInt('HN_TREE_CONCURRENCY', 128)
   },
 
   /**

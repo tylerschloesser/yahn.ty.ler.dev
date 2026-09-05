@@ -49,7 +49,30 @@ price of wrong sibling order everywhere.
 > If you are looking for a cheaper correct option, the one this spike suggests but the plan did
 > not adopt is: build the tree from Algolia, then re-order each level from that parent's Firebase
 > `kids`. That is one request per *non-leaf* comment (48 rather than 315 on 49563851) instead of
-> one per comment. Nothing here implements it. Do not switch to it without measuring.
+> one per comment. Nothing here implements it, and it is now a **worse trade than it looks** —
+> see below.
+
+## Concurrency is the lever, not request count
+
+Measured 2026-09-05 on thread 49563355 (1,603 nodes, depth 15) through the real API, varying
+`HN_TREE_CONCURRENCY` and nothing else:
+
+| concurrency | 24 | 64 | 128 | 192 |
+| --- | --- | --- | --- | --- |
+| wall clock | 5.2s | 2.4s | **1.6s** | 1.5s |
+
+Flat past 128, so 128 is the knee and is the default. All four runs returned the **identical
+1,603 nodes in the identical order with zero upstream errors** — this widens the pipe, it does
+not change what the walk produces.
+
+That is what settles the cheaper-tree question above. On this thread 665 of the 1,603 nodes are
+non-leaf, so Algolia-plus-`kids` would be 666 requests rather than 1,604 — 2.4x fewer, and it
+buys a source that inherits Algolia's indexing lag and has to reconcile ids present in `kids` but
+missing from Algolia's tree. Raising the concurrency bought 3.3x for one integer and no new code
+path. **Do not build the third source without a measurement that beats 1.6s.**
+
+Firebase publishes no rate limit and none was hit at 192. If one ever appears, this is the first
+number to turn down, and `truncated` already exists for the case where a walk has to stop early.
 
 ## Invariants
 

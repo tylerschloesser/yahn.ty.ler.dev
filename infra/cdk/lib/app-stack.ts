@@ -57,6 +57,9 @@ export class AppStack extends Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.ARM_64,
       handler: 'handler',
+      // 512, and 1024 was tried and rejected — see `.claude/rules/cdk.md`.
+      // The item endpoint is latency-bound on Firebase, not CPU-bound here, so
+      // more vCPU buys about 11% for 74% more GB-ms.
       memorySize: 512,
       timeout: Duration.seconds(30),
       bundling: {

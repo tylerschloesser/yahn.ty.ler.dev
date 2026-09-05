@@ -1,3 +1,4 @@
+import { PAGE_SIZE } from '@yahn/schema'
 import type { SearchResponse, SearchSort } from '@yahn/schema'
 import * as algolia from './algolia/client.ts'
 import { storyFromAlgoliaHit } from './normalize.ts'
@@ -24,6 +25,11 @@ export async function search(params: SearchParams): Promise<SearchResponse> {
     tags: 'story',
     page: params.page,
     sort,
+    // Algolia's own default is 20 (docs/hn-api.md). A page is 30 rows
+    // everywhere else in this app, and `nbPages` is computed by Algolia from
+    // whatever this says — so leaving it unset would make search the one
+    // surface that paginates differently from the rest.
+    hitsPerPage: PAGE_SIZE,
   })
 
   return {
