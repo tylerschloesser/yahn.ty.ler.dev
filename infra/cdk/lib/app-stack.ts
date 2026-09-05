@@ -57,7 +57,17 @@ export class AppStack extends Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.ARM_64,
       handler: 'handler',
-      memorySize: 512,
+      // Lambda scales vCPU with memory, and the busiest endpoint here is
+      // CPU-bound rather than memory-bound: a 1,603-node comment tree is
+      // 1,600 concurrent HTTP fetches plus a 718KB serialize. At 512MB
+      // (~0.3 vCPU) that measured **2.9s cold** on the deployed preview
+      // versus 1.6s for identical work on a developer laptop, which is the
+      // signature of a CPU ceiling rather than of HN being slow.
+      //
+      // Raising it is close to cost-neutral: Lambda bills GB-ms, so double
+      // the memory at half the duration is the same money. See
+      // `.claude/rules/cdk.md` for the numbers this landed on.
+      memorySize: 1024,
       timeout: Duration.seconds(30),
       bundling: {
         target: 'node24',
