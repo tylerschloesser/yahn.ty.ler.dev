@@ -51,6 +51,8 @@ Split by area rather than by page so a failure names the thing that broke.
   suspect your own resolver before the deploy — one that was asked for `pr-<N>` *before* the
   record existed caches the NXDOMAIN, and `dig` bypasses that cache so it will disagree.
   `curl --resolve pr-<N>.yahn.ty.ler.dev:443:<ip>` settles it. See `.claude/rules/cdk.md`.
+- **`pnpm e2e -- e2e/x.spec.ts` does not filter** — the `--` is swallowed and the whole suite
+  runs. `pnpm e2e e2e/x.spec.ts` is the form that works.
 - `expect.timeout` is raised above Playwright's default because live HN, not a fixture, is the
   origin behind every assertion on a cold cache.
 - **Do not assert on a locator whose filter depends on the state under test.** `thread.spec.ts`

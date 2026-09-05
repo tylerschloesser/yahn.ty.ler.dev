@@ -10,11 +10,41 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AskRouteImport } from './routes/ask'
+import { Route as BestRouteImport } from './routes/best'
+import { Route as JobsRouteImport } from './routes/jobs'
+import { Route as NewestRouteImport } from './routes/newest'
+import { Route as ShowRouteImport } from './routes/show'
 import { Route as ItemIdRouteImport } from './routes/item.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AskRoute = AskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BestRoute = BestRouteImport.update({
+  id: '/best',
+  path: '/best',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewestRoute = NewestRouteImport.update({
+  id: '/newest',
+  path: '/newest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShowRoute = ShowRouteImport.update({
+  id: '/show',
+  path: '/show',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ItemIdRoute = ItemIdRouteImport.update({
@@ -25,27 +55,56 @@ const ItemIdRoute = ItemIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
+  '/best': typeof BestRoute
+  '/jobs': typeof JobsRoute
+  '/newest': typeof NewestRoute
+  '/show': typeof ShowRoute
   '/item/$id': typeof ItemIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
+  '/best': typeof BestRoute
+  '/jobs': typeof JobsRoute
+  '/newest': typeof NewestRoute
+  '/show': typeof ShowRoute
   '/item/$id': typeof ItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
+  '/best': typeof BestRoute
+  '/jobs': typeof JobsRoute
+  '/newest': typeof NewestRoute
+  '/show': typeof ShowRoute
   '/item/$id': typeof ItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/item/$id'
+  fullPaths:
+    '/' | '/ask' | '/best' | '/jobs' | '/newest' | '/show' | '/item/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/item/$id'
-  id: '__root__' | '/' | '/item/$id'
+  to: '/' | '/ask' | '/best' | '/jobs' | '/newest' | '/show' | '/item/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/ask'
+    | '/best'
+    | '/jobs'
+    | '/newest'
+    | '/show'
+    | '/item/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AskRoute: typeof AskRoute
+  BestRoute: typeof BestRoute
+  JobsRoute: typeof JobsRoute
+  NewestRoute: typeof NewestRoute
+  ShowRoute: typeof ShowRoute
   ItemIdRoute: typeof ItemIdRoute
 }
 
@@ -56,6 +115,41 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ask': {
+      id: '/ask'
+      path: '/ask'
+      fullPath: '/ask'
+      preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/best': {
+      id: '/best'
+      path: '/best'
+      fullPath: '/best'
+      preLoaderRoute: typeof BestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/newest': {
+      id: '/newest'
+      path: '/newest'
+      fullPath: '/newest'
+      preLoaderRoute: typeof NewestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/show': {
+      id: '/show'
+      path: '/show'
+      fullPath: '/show'
+      preLoaderRoute: typeof ShowRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/item/$id': {
@@ -70,6 +164,11 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AskRoute: AskRoute,
+  BestRoute: BestRoute,
+  JobsRoute: JobsRoute,
+  NewestRoute: NewestRoute,
+  ShowRoute: ShowRoute,
   ItemIdRoute: ItemIdRoute,
 }
 export const routeTree = rootRouteImport

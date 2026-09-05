@@ -40,8 +40,23 @@
 .navItem {
   font-size: var(--text-2);
   color: var(--color-accent-solid-text);
-  cursor: default;
+  text-decoration: none;
+  border-radius: var(--radius-1);
   opacity: 0.75;
+}
+
+.navItem:hover {
+  text-decoration: underline;
+}
+
+/* The global ring is orange-8, which vanishes against the orange bar. */
+.navItem:focus-visible {
+  outline-color: var(--color-focus-ring-on-accent);
+}
+
+.navItem[data-active] {
+  font-weight: var(--weight-semibold);
+  opacity: 1;
 }
 
 .main {

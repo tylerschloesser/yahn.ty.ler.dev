@@ -12,7 +12,7 @@ export function CommentTree({ comments, depth = 0 }: CommentTreeProps) {
   if (comments.length === 0) return null
 
   return (
-    <ul className={styles.list} {...(depth > 0 ? { 'data-nested': true } : {})}>
+    <ul className={styles.list} {...(depth > 0 ? { 'data-nested': '' } : {})}>
       {comments.map((comment) => (
         <li key={comment.id}>
           <CommentNode comment={comment} depth={depth} />
@@ -32,7 +32,7 @@ export function CommentNode({ comment, depth }: CommentNodeProps) {
   const iso = new Date(comment.time * 1000).toISOString()
 
   return (
-    <article data-testid="comment" className={styles.comment} {...(tombstone ? { 'data-tombstone': true } : {})}>
+    <article data-testid="comment" className={styles.comment} {...(tombstone ? { 'data-tombstone': '' } : {})}>
       <div className={styles.meta}>
         {!tombstone && comment.by && <span className={styles.author}>{comment.by}</span>}
         <time dateTime={iso}>{timeAgo(comment.time)}</time>

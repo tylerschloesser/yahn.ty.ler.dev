@@ -30,7 +30,7 @@ function StoryRow({ story, rank }: StoryRowProps) {
 
   return (
     <li data-testid="story" className={styles.row}>
-      <span className={styles.rank}>{rank}.</span>
+      <span data-testid="story-rank" className={styles.rank}>{rank}.</span>
       <div className={styles.content}>
         <div className={styles.titleLine}>
           {story.url ? (

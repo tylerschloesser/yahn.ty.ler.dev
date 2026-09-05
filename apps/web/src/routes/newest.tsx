@@ -4,22 +4,22 @@ import { FeedPage } from '../components/FeedPage/FeedPage.tsx'
 import { feedSearchSchema } from '../feeds.ts'
 import { feedQueryOptions } from '../queries.ts'
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute('/newest')({
   validateSearch: feedSearchSchema,
   // `p` is optional so a bare nav link stays bare — see `src/feeds.ts`.
   loaderDeps: ({ search }) => ({ page: search.p ?? 1 }),
-  loader: ({ context, deps }) => context.queryClient.ensureQueryData(feedQueryOptions('top', deps.page)),
-  component: Index,
+  loader: ({ context, deps }) => context.queryClient.ensureQueryData(feedQueryOptions('new', deps.page)),
+  component: Newest,
 })
 
-function Index() {
+function Newest() {
   const { page } = Route.useLoaderDeps()
-  const { data } = useSuspenseQuery(feedQueryOptions('top', page))
+  const { data } = useSuspenseQuery(feedQueryOptions('new', page))
 
   return (
     <FeedPage
-      heading="Top stories"
-      path="/"
+      heading="New stories"
+      path="/newest"
       page={data.page}
       pageCount={data.pageCount}
       stories={data.stories}

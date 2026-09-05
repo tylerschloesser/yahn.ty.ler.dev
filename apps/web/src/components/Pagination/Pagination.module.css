@@ -1,13 +1,3 @@
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-
-.title {
-  font-size: var(--text-5);
-}
-
 .pagination {
   display: flex;
   gap: var(--space-4);
@@ -22,12 +12,13 @@
   border-radius: var(--radius-1);
 }
 
-.pageLink:hover {
+.pageLink:not([data-disabled]):hover {
   text-decoration: underline;
 }
 
-.pageLinkDisabled {
+.pageLink[data-disabled] {
   color: var(--color-border);
+  cursor: default;
 }
 
 .pageStatus {
