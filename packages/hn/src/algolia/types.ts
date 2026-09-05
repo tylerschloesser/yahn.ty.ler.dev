@@ -50,21 +50,31 @@ export const AlgoliaNodeSchema: z.ZodType<AlgoliaNode> = z.looseObject({
   },
 }) as z.ZodType<AlgoliaNode>
 
-/** A story hit from `/search` or `/search_by_date`. `objectID` is a string. */
+/**
+ * A story hit from `/search` or `/search_by_date`. `objectID` is a **string**.
+ *
+ * Almost everything is `.nullish()`, and that is not defensive padding — it is
+ * measured. `docs/hn-api.md`'s field table came from a `?tags=front_page`
+ * probe, where `story_text` is `null` on a link story. On `?query=…&tags=story`
+ * the same field is **absent** instead, and a schema that only tolerated
+ * `null` turned every search into a 500. Algolia is not consistent about
+ * null-versus-omitted across endpoints, so treat both as "no value" for every
+ * field except the four that identify the hit.
+ */
 export const AlgoliaStoryHitSchema = z.looseObject({
   objectID: z.string(),
   title: z.string(),
-  url: z.string().nullable(),
-  author: z.string().nullable(),
-  points: z.number().int().nullable(),
-  story_text: z.string().nullable(),
-  num_comments: z.number().int().nullable(),
-  created_at: z.string(),
   created_at_i: z.number().int(),
-  updated_at: z.string(),
-  children: z.array(z.number().int()),
-  story_id: z.number().int().nullable(),
-  _tags: z.array(z.string()),
+  _tags: z.array(z.string()).default([]),
+  url: z.string().nullish(),
+  author: z.string().nullish(),
+  points: z.number().int().nullish(),
+  story_text: z.string().nullish(),
+  num_comments: z.number().int().nullish(),
+  created_at: z.string().nullish(),
+  updated_at: z.string().nullish(),
+  children: z.array(z.number().int()).nullish(),
+  story_id: z.number().int().nullish(),
 })
 
 export type AlgoliaStoryHit = z.output<typeof AlgoliaStoryHitSchema>

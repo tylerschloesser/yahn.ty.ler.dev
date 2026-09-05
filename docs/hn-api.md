@@ -491,7 +491,7 @@ Story hit keys, live (`?tags=front_page`):
 | `url` | |
 | `author` | |
 | `points` | number |
-| `story_text` | `null` on link stories |
+| `story_text` | `null` on link stories in the `?tags=front_page` probe — but **absent entirely** on `?query=…&tags=story` hits (found 2026-09-05 while implementing; Algolia is not consistent about null-versus-omitted across endpoints, so a client schema must tolerate both) |
 | `num_comments` | number |
 | `created_at` | ISO 8601 string |
 | `created_at_i` | Unix seconds |

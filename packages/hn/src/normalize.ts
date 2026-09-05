@@ -66,7 +66,7 @@ export function storyFromAlgoliaHit(hit: AlgoliaStoryHit): Story {
 
   return {
     id: Number(hit.objectID),
-    by: hit.author,
+    by: hit.author ?? null,
     time: hit.created_at_i,
     contentKey: contentKey(url, text),
     // Algolia's hit shape has no deleted/dead flag (not covered by
@@ -82,8 +82,8 @@ export function storyFromAlgoliaHit(hit: AlgoliaStoryHit): Story {
     url,
     host: hostFromUrl(url),
     text,
-    score: hit.points,
-    descendants: hit.num_comments,
+    score: hit.points ?? null,
+    descendants: hit.num_comments ?? null,
   }
 }
 
