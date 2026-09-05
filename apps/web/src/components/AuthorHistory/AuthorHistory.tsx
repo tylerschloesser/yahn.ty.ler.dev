@@ -108,19 +108,24 @@ function CommentBody({ item, iso }: BodyProps) {
 // story for a comment. `storyId` is nullable, so a row with none renders
 // plain text rather than a broken link.
 function ItemTitle({ item }: { item: AuthorItem }) {
+  // `title` is nullable too — a comment whose parent story Algolia has no
+  // `story_title` for would otherwise render a link with no text, which is a
+  // link with no accessible name.
+  const title = item.title ?? 'untitled'
+
   if (item.url) {
     return (
       <a href={item.url} rel="noreferrer" className={styles.title}>
-        {item.title}
+        {title}
       </a>
     )
   }
   if (item.storyId !== null) {
     return (
       <Link to="/item/$id" params={{ id: item.storyId }} className={styles.title}>
-        {item.title}
+        {title}
       </Link>
     )
   }
-  return <span className={styles.title}>{item.title}</span>
+  return <span className={styles.title}>{title}</span>
 }

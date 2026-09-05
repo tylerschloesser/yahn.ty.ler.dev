@@ -140,3 +140,23 @@ thai's file, on node 24: the Claude Code GitHub Action, interactive mode, gated 
 setup-token`, chosen over an API key because the account's carries no credit) and the Claude
 GitHub App installed; neither exists on this repo. It also triggers on `issues: opened`, so an
 issue whose body contains `@claude` starts a run when created.
+
+## Lambda memory: 512 is measured, and 1024 was rejected
+
+Measured 2026-09-05 on the `pr-3` preview, item 49563355 (1,603 nodes, 718KB), with a random
+`?cb=` per request so every one reached the origin — the `/api/*` cache policy keys on the full
+query string, which is how you force a miss.
+
+| | 512MB | 1024MB |
+| --- | --- | --- |
+| origin miss, warm Lambda | 2.71 / 2.92 / 2.95s | 2.42 / 2.56 / 2.63s |
+| GB-s billed per request | 1.50 | **2.61** |
+
+**11% faster for 74% more GB-ms**, so 512 stays. The hypothesis that motivated trying it — that
+1,600 concurrent fetches plus a 718KB serialize are CPU-bound at ~0.3 vCPU — is wrong. The
+endpoint is latency-bound on Firebase, and no amount of vCPU makes HN answer sooner; the gap
+against a laptop's 1.6s is Lambda's network path.
+
+Not settled, and where to look next: the one *cold-start* sample was 5.65s at 512 and 3.45s at
+1024. n=1 each, so it proves nothing — but this site's traffic means most origin requests hit a
+cold Lambda, so that is the number to measure properly, not the steady state above.

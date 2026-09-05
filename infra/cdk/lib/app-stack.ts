@@ -57,17 +57,10 @@ export class AppStack extends Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.ARM_64,
       handler: 'handler',
-      // Lambda scales vCPU with memory, and the busiest endpoint here is
-      // CPU-bound rather than memory-bound: a 1,603-node comment tree is
-      // 1,600 concurrent HTTP fetches plus a 718KB serialize. At 512MB
-      // (~0.3 vCPU) that measured **2.9s cold** on the deployed preview
-      // versus 1.6s for identical work on a developer laptop, which is the
-      // signature of a CPU ceiling rather than of HN being slow.
-      //
-      // Raising it is close to cost-neutral: Lambda bills GB-ms, so double
-      // the memory at half the duration is the same money. See
-      // `.claude/rules/cdk.md` for the numbers this landed on.
-      memorySize: 1024,
+      // 512, and 1024 was tried and rejected — see `.claude/rules/cdk.md`.
+      // The item endpoint is latency-bound on Firebase, not CPU-bound here, so
+      // more vCPU buys about 11% for 74% more GB-ms.
+      memorySize: 512,
       timeout: Duration.seconds(30),
       bundling: {
         target: 'node24',
