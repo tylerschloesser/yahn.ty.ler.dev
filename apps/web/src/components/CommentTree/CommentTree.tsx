@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import type { Comment } from '@yahn/schema'
 import { sanitizeHnHtml } from '../../lib/html.ts'
 import { timeAgo } from '../../lib/time.ts'
@@ -34,7 +35,16 @@ export function CommentNode({ comment, depth }: CommentNodeProps) {
   return (
     <article data-testid="comment" className={styles.comment} {...(tombstone ? { 'data-tombstone': '' } : {})}>
       <div className={styles.meta}>
-        {!tombstone && comment.by && <span className={styles.author}>{comment.by}</span>}
+        {!tombstone && comment.by && (
+          <Link
+            data-testid="comment-author"
+            to="/user/$id"
+            params={{ id: comment.by }}
+            className={styles.author}
+          >
+            {comment.by}
+          </Link>
+        )}
         <time dateTime={iso}>{timeAgo(comment.time)}</time>
       </div>
       {tombstone ? (

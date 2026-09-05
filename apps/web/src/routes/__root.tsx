@@ -1,5 +1,6 @@
-import { Link, Outlet, createRootRouteWithContext } from '@tanstack/react-router'
+import { Link, Outlet, createRootRouteWithContext, useNavigate } from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
+import { type FormEvent, useState } from 'react'
 import { SECTIONS } from '../feeds.ts'
 import styles from './__root.module.css'
 
@@ -17,6 +18,17 @@ const activeOptions = { exact: true, includeSearch: false }
 const activeProps = { 'data-active': '' }
 
 function RootLayout() {
+  const navigate = useNavigate()
+  const [query, setQuery] = useState('')
+
+  // A real <form> so Enter submits for free and the control is announced as
+  // search — not a keydown listener on the input. Navigating with only `q`
+  // (no `sort`/`p`) is what keeps the URL clean for a fresh search.
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void navigate({ to: '/search', search: { q: query } })
+  }
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -40,6 +52,22 @@ function RootLayout() {
             ))}
           </ul>
         </nav>
+        <search className={styles.search}>
+          <form onSubmit={handleSubmit}>
+            <label htmlFor="header-search-input" className={styles.searchLabel}>
+              Search
+            </label>
+            <input
+              id="header-search-input"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search HN…"
+              data-testid="search-input"
+              className={styles.searchInput}
+            />
+          </form>
+        </search>
       </header>
 
       <main className={styles.main}>

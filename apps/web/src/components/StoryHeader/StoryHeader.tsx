@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import type { Story } from '@yahn/schema'
 import { sanitizeHnHtml } from '../../lib/html.ts'
 import { pluralize, timeAgo } from '../../lib/time.ts'
@@ -30,7 +31,14 @@ export function StoryHeader({ story, truncated }: StoryHeaderProps) {
       </div>
       <div className={styles.subtext}>
         {story.score !== null && <span data-testid="story-score">{pluralize(story.score, 'point')}</span>}
-        {story.by && <span>by {story.by}</span>}
+        {story.by && (
+          <span>
+            by{' '}
+            <Link to="/user/$id" params={{ id: story.by }} className={styles.author}>
+              {story.by}
+            </Link>
+          </span>
+        )}
         <time dateTime={iso}>{timeAgo(story.time)}</time>
         <span>{pluralize(commentCount, 'comment')}</span>
       </div>

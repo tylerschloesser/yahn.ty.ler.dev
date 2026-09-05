@@ -21,7 +21,7 @@ export function FeedPage({ heading, path, page, pageCount, stories }: FeedPagePr
         {heading}
       </h1>
       <StoryList stories={stories} page={page} />
-      <Pagination to={path} page={page} pageCount={pageCount} />
+      <Pagination target={{ kind: 'feed', to: path }} page={page} pageCount={pageCount} />
     </div>
   )
 }

@@ -27,6 +27,13 @@
 .author {
   font-weight: var(--weight-medium);
   color: var(--color-text-strong);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+.author:hover {
+  color: var(--color-accent-text);
+  text-decoration: underline;
 }
 
 .body {

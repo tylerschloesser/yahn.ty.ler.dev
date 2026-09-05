@@ -1,0 +1,34 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.heading {
+  font-size: var(--text-5);
+}
+
+.sorts {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-2);
+}
+
+.sortLink {
+  color: var(--color-accent-text);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+.sortLink:hover {
+  text-decoration: underline;
+}
+
+.sortLink[data-active] {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-strong);
+}
+
+.empty {
+  color: var(--color-text);
+}
