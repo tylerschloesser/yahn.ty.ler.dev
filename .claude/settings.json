@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm verify)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm lint:fix)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm test)",
+      "Bash(pnpm build)",
+      "Bash(pnpm e2e)",
+      "Bash(pnpm e2e:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm exec oxlint:*)",
+      "Bash(pnpm exec stylelint:*)",
+      "Bash(pnpm exec vitest:*)",
+      "Bash(pnpm exec playwright:*)",
+      "Bash(pnpm -r:*)",
+      "Bash(pnpm --filter:*)",
+
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git ls-remote:*)",
+      "Bash(git branch:*)",
+
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh search:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh variable list:*)",
+
+      "Bash(curl -sS https://yahn.ty.ler.dev/*)",
+      "Bash(curl -sS https://pr-*.yahn.ty.ler.dev/*)",
+      "Bash(curl -sS http://localhost:3001/*)",
+      "Bash(curl -sS http://localhost:5173/*)",
+
+      "Bash(aws cloudformation describe-stacks:*)",
+      "Bash(aws cloudformation list-stacks:*)",
+      "Bash(aws cloudformation describe-stack-events:*)",
+      "Bash(aws acm list-certificates:*)",
+      "Bash(aws acm describe-certificate:*)",
+      "Bash(aws route53 list-resource-record-sets:*)",
+      "Bash(aws iam simulate-principal-policy:*)",
+      "Bash(aws sts get-caller-identity:*)",
+      "Bash(pnpm --filter @yahn/cdk exec cdk diff:*)",
+      "Bash(pnpm --filter @yahn/cdk exec cdk list:*)",
+
+      "WebFetch(domain:base-ui.com)",
+      "WebFetch(domain:tanstack.com)",
+      "WebFetch(domain:hn.algolia.com)",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

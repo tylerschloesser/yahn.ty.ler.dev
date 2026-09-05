@@ -60,6 +60,11 @@ model verifies, so the expensive model spends its context on judgment, not typin
   implementer's reasoning, and reports PASS/FAIL with evidence without fixing anything.
 - Keep the expensive model for decomposition, judgment calls, anything touching an invariant in
   a rule file, and review of the integrated diff.
+- A finding the current task should not absorb is neither fixed nor dropped: the **`file-issue`
+  skill** (`.claude/skills/`) files it and you carry on. `.claude/settings.json` allowlists the
+  read-only calls — `pnpm verify` and friends, `gh` reads, `aws` describes, `curl` against the
+  live site and localhost. Nothing destructive is on that list, and `cdk destroy` and
+  `delete-stack` are deliberately absent: the account also hosts thai.ler.dev's production.
 - Don't delegate a chunk smaller than its handoff, or one that only makes sense with the whole
   conversation in view.
 
