@@ -78,12 +78,13 @@ an agent reading it literally will "fix" working code.
 - A change that invalidates a claim in any rule fixes the rule **in the same commit**.
 - When something costs a debugging session and isn't obvious from the code, add it to the
   matching rule. If no rule fits, add one and a row to the table above.
-- Budgets: this file under 100 lines, each rule under about 120. `cdk.md` is the one deliberate
-  exception, now **~165**, because it is the only rule covering two `paths` globs —
-  `infra/cdk/**` and `.github/workflows/**` — whose contents cross-reference constantly. Epoch 3
-  raised the ceiling from 140 rather than splitting, deliberately: the obvious split puts the
-  preview lifecycle in a workflows rule, and a session editing `cleanup.yml` would then no longer
-  load the IAM scope and stack-naming facts that make that workflow safe. **The trigger to split
-  is a workflow section that stops referring to stack internals**, not a line count.
+- Budgets: this file under 100 lines, each rule under about 120. **`cdk.md` is exempt** — it is
+  the only rule covering two `paths` globs (`infra/cdk/**` and `.github/workflows/**`) whose
+  contents cross-reference constantly, and Epoch 3 raised its ceiling twice in one session before
+  admitting the number was the wrong control. It is ~190 and that is fine. **The real test is
+  whether a reader can find the one paragraph they need**, which headings decide, not length.
+  Split it when a workflow section stops referring to stack internals — until then, a session
+  editing `cleanup.yml` needs the IAM scope and stack naming that make it safe, and a split would
+  take those away.
 - A claim about a third party's undocumented behaviour needs a way to re-check it, not just a
   date. `scripts/ordering-spike.mjs` is the pattern.
