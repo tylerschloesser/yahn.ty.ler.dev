@@ -1,0 +1,102 @@
+# Deploys a per-PR preview stack and comments the preview URL on the PR.
+#
+# concurrency.cancel-in-progress is deliberately false: cancelling this job
+# does not cancel the CloudFormation deploy it started, and the next push
+# would then hit a stack stuck in UPDATE_IN_PROGRESS and fail. A new push
+# just queues behind the run in flight for this PR instead.
+
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    # Fork PRs get no preview, and that is correct rather than a
+    # limitation: GitHub will not grant id-token: write to a workflow run
+    # triggered by a fork PR, so the deploy could not authenticate anyway.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: github-actions-pr-preview
+
+      - name: deploy
+        id: deploy
+        run: pnpm --filter cdk exec cdk deploy YahnAppStack-pr-$PR -c pr=$PR --require-approval never
+
+      # CloudFormation reports the stack complete before the new A record has
+      # propagated, so the first Playwright navigation can hit NXDOMAIN and
+      # burn all its retries in a couple of seconds. Poll the API's own health
+      # route until DNS and the distribution agree the site is up.
+      - name: Wait for the preview to answer
+        run: |
+          set -euo pipefail
+          url="https://pr-$PR.yahn.ty.ler.dev/api/health"
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 10 "$url" > /dev/null; then
+              echo "$url answered after $i attempt(s)"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "$url never answered"
+          exit 1
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: e2e
+        id: e2e
+        run: pnpm e2e
+        env:
+          PLAYWRIGHT_BASE_URL: https://pr-${{ github.event.pull_request.number }}.yahn.ty.ler.dev
+
+      # `always()`, so a failing preview still tells the PR where to look.
+      - name: Comment preview URL
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ steps.deploy.outcome }}" != "success" ]; then
+            STATUS="❌ deploy ${{ steps.deploy.outcome }} — the preview may not exist"
+          elif [ "${{ steps.e2e.outcome }}" = "success" ]; then
+            STATUS="✅ deployed and e2e passed"
+          else
+            STATUS="⚠️ deployed, but e2e ${{ steps.e2e.outcome }}"
+          fi
+          gh pr comment "$PR" --edit-last --create-if-none --body "$(cat <<EOF
+          ### PR Preview
+
+          $STATUS
+
+          - URL: https://pr-$PR.yahn.ty.ler.dev
+          - Commit: ${{ github.event.pull_request.head.sha }}
+          EOF
+          )"

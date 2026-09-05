@@ -1,0 +1,90 @@
+# Safety net for a PR teardown that failed, or raced an in-flight deploy.
+#
+# The `YahnAppStack-pr-` prefix, plus the numeric guard on what follows it,
+# is the ONLY thing standing between this cron and every other stack in
+# the account — including production. Both must stay exactly as they are:
+# loosen the prefix match or drop the `^[0-9]+$` check and this job can
+# delete a stack it was never meant to touch.
+#
+# This does not use CDK: the stack list comes from AWS itself rather than
+# from the app (a stack whose PR already closed has nothing left to
+# synthesize against), and a raw `aws cloudformation delete-stack` needs
+# no checkout, no build and no synth — the stack's own autoDeleteObjects
+# custom resource runs regardless of how the delete was triggered.
+
+name: Cleanup
+
+on:
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: github-actions-cleanup
+
+      - name: Delete stale PR preview stacks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          names=$(aws cloudformation list-stacks \
+            --region us-east-1 \
+            --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE ROLLBACK_COMPLETE CREATE_FAILED UPDATE_FAILED DELETE_FAILED \
+            --query "StackSummaries[?starts_with(StackName, 'YahnAppStack-pr-')].StackName" \
+            --output text)
+
+          if [ -z "$names" ]; then
+            echo "No PR preview stacks found."
+            exit 0
+          fi
+
+          for name in $names; do
+            n="${name#YahnAppStack-pr-}"
+
+            if ! [[ "$n" =~ ^[0-9]+$ ]]; then
+              echo "Skipping $name: '$n' is not a bare PR number, refusing to touch it."
+              continue
+            fi
+
+            echo "Checking PR #$n for stack $name"
+
+            state=$(gh pr view "$n" --repo "${{ github.repository }}" --json state --jq .state 2>&1) || {
+              echo "Could not look up PR #$n ($state), leaving $name alone."
+              continue
+            }
+
+            if [ "$state" != "CLOSED" ] && [ "$state" != "MERGED" ]; then
+              echo "PR #$n is $state, leaving $name alone."
+              continue
+            fi
+
+            echo "PR #$n is $state, deleting $name"
+            # One stack that refuses to delete must not stop the sweep: a
+            # DELETE_FAILED stack needs a human, and the others are still owed
+            # a teardown. `failed` is echoed at the end so the run is red.
+            if aws cloudformation delete-stack --region us-east-1 --stack-name "$name" \
+              && aws cloudformation wait stack-delete-complete --region us-east-1 --stack-name "$name"; then
+              echo "Deleted $name"
+            else
+              echo "FAILED to delete $name — needs a look"
+              failed=1
+            fi
+          done
+
+          if [ "${failed:-0}" = "1" ]; then
+            echo "At least one stack could not be deleted."
+            exit 1
+          fi

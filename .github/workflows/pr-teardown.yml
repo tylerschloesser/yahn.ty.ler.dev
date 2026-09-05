@@ -1,0 +1,52 @@
+# Tears down a PR's preview stack when the PR closes (merged or not).
+#
+# concurrency uses the *same* group as pr-preview.yml on purpose, so a
+# teardown can never run concurrently with a deploy for the same PR —
+# whichever started first finishes before the other begins.
+
+name: PR Teardown
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    # Same fork guard as pr-preview.yml: a fork PR never got a preview
+    # stack (it couldn't authenticate to create one), so there is nothing
+    # to tear down and no id-token to do it with anyway.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # cdk destroy still synthesizes the app, and the app stack reads
+      # apps/web/dist and throws without it.
+      - run: pnpm build
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: github-actions-pr-teardown
+
+      - run: pnpm --filter cdk exec cdk destroy YahnAppStack-pr-$PR -c pr=$PR --force

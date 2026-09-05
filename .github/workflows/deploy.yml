@@ -1,0 +1,69 @@
+# Deploys the shared stack and the production app stack on every push to
+# main.
+#
+# The OIDC stack (the OIDC provider + deploy role that this workflow
+# assumes) is deliberately NOT deployed here — CI can't grant itself the
+# trust it needs to run (chicken-and-egg). That stack is applied once,
+# locally, via `cdk deploy` before this workflow can work.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: github-actions-deploy
+
+      # pnpm verify already ran `pnpm build`, but cdk deploy re-synthesizes
+      # the app, and the app stack reads apps/web/dist and throws without it.
+      - run: pnpm --filter cdk exec cdk deploy YahnSharedStack YahnAppStack-prod --require-approval never
+
+      # The distribution is reported complete before an edge change has
+      # finished propagating, so give the site a chance to answer before
+      # Playwright spends its retries on a connection error.
+      - name: Wait for the site to answer
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 https://yahn.ty.ler.dev/api/health > /dev/null; then
+              echo "answered after $i attempt(s)"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "https://yahn.ty.ler.dev/api/health never answered"
+          exit 1
+
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+        env:
+          PLAYWRIGHT_BASE_URL: https://yahn.ty.ler.dev
