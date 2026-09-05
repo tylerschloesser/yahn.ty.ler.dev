@@ -1,0 +1,52 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/*
+ * HN's top bar is a solid orange strip — the one place on the page real HN
+ * commits to the accent color as a fill rather than a text/border tint.
+ */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--color-accent-solid);
+}
+
+.brand {
+  font-size: var(--text-4);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-solid-text);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+/* The global ring is orange-8, which vanishes against the orange bar. */
+.brand:focus-visible {
+  outline-color: var(--color-focus-ring-on-accent);
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.navItem {
+  font-size: var(--text-2);
+  color: var(--color-accent-solid-text);
+  cursor: default;
+  opacity: 0.75;
+}
+
+.main {
+  width: 100%;
+  max-width: var(--layout-max-width);
+  padding: var(--space-6) var(--space-4) var(--space-8);
+  margin-inline: auto;
+}

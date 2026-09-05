@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  // Playwright's own config and specs. They belong to no package — `pnpm e2e`
+  // runs from the root — so this is where `tsc -b` picks them up.
+  "include": ["playwright.config.ts", "e2e"]
+}

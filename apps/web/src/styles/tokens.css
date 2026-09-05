@@ -1,0 +1,99 @@
+/*
+ * Semantic tokens — the only layer components are allowed to reference.
+ *
+ * Everything is declared on :root; `.dark` carries overrides only, for the
+ * handful of values that genuinely differ by theme rather than following the
+ * palette. Colors resolve through the Radix step contract, so they need no
+ * dark-mode counterpart here.
+ */
+
+:root {
+  /* surfaces */
+  --color-bg: var(--sand-1);
+  --color-bg-subtle: var(--sand-2);
+  --color-surface: var(--sand-3);
+  --color-surface-translucent: var(--sand-a3);
+
+  /* borders */
+  --color-border-subtle: var(--sand-6);
+  --color-border: var(--sand-7);
+
+  /* text */
+  --color-text: var(--sand-11);
+  --color-text-strong: var(--sand-12);
+
+  /* accent */
+  --color-accent-surface: var(--orange-a3);
+  --color-accent-border: var(--orange-a8);
+  --color-accent-text: var(--orange-11);
+  --color-accent-solid: var(--orange-9);
+
+  /*
+   * Orange is one of Radix's *bright* scales: step 9 takes a dark foreground
+   * in both themes, not white — which is also what real HN does with black on
+   * its orange bar. `black-a12` is theme-independent, so this alias does not
+   * flip with `.dark` the way a sand step would.
+   */
+  --color-accent-solid-text: var(--black-a12);
+  --color-focus-ring: var(--orange-8);
+
+  /* The default ring is orange-8 on orange-9 — invisible against the bar. */
+  --color-focus-ring-on-accent: var(--black-a12);
+
+  /* status — same step contract, so this needs no dark counterpart either */
+  --color-danger-surface: var(--red-a3);
+  --color-danger-border: var(--red-a6);
+  --color-danger-text: var(--red-11);
+
+  /* elevation */
+  --shadow-color: var(--black-a4);
+  --shadow-color-ambient: var(--black-a3);
+  --shadow-1: 0 1px 2px var(--shadow-color-ambient);
+
+  /* space — 4px scale, only the steps this shell uses */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /* radius */
+  --radius-1: 0.25rem;
+  --radius-2: 0.375rem;
+
+  /*
+   * Type — HN is an information-dense feed of one-line titles, not prose, so
+   * the scale sits noticeably tighter than a reading-app scale: body text
+   * lands at 15px instead of 18px, and headings step up in small increments
+   * rather than jumping to display sizes.
+   */
+  --font-sans: system-ui, 'Segoe UI', roboto, sans-serif;
+  --font-mono: ui-monospace, consolas, monospace;
+  --text-1: 0.75rem; /* 12px — meta: points, age, comment counts */
+  --text-2: 0.8125rem; /* 13px — nav links, secondary labels */
+  --text-3: 0.9375rem; /* 15px — body */
+  --text-4: 1.0625rem; /* 17px — item titles */
+  --text-5: 1.3125rem; /* 21px — h2 */
+  --text-7: 1.75rem; /* 28px — h1 */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0em;
+
+  /* layout */
+  --layout-max-width: 60rem;
+  --icon-size-1: 1rem;
+}
+
+/*
+ * Shadows are the one thing the palette can't carry: the same alpha reads as a
+ * soft lift on white and as nothing at all on a near-black surface.
+ */
+.dark {
+  --shadow-color: var(--black-a11);
+  --shadow-color-ambient: var(--black-a9);
+}

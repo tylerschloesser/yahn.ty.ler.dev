@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "noEmit": true,
+
+    // `cmk` writes CSS Module types to generated/src/**; rootDirs maps them
+    // onto the source tree so `./X.module.css` resolves to the real .d.ts
+    // instead of Vite's catch-all index signature.
+    "rootDirs": ["${configDir}", "${configDir}/generated"],
+    "plugins": [{ "name": "@css-modules-kit/ts-plugin" }]
+  },
+  "cmkOptions": { "enabled": true },
+  "include": ["src", "generated/src"]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "@yahn/web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "cmk -p tsconfig.app.json && tsc -b && vite build",
+    "typecheck": "cmk -p tsconfig.app.json && tsc -b",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@base-ui/react": "catalog:",
+    "@radix-ui/colors": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@yahn/schema": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@css-modules-kit/codegen": "catalog:",
+    "@css-modules-kit/ts-plugin": "catalog:",
+    "@tanstack/react-router-devtools": "catalog:",
+    "@tanstack/router-plugin": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

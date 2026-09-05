@@ -4,6 +4,7 @@
     { "path": "./packages/schema" },
     { "path": "./packages/hn" },
     { "path": "./apps/api" },
-    { "path": "./apps/web" }
+    { "path": "./apps/web" },
+    { "path": "./tsconfig.e2e.json" }
   ]
 }
