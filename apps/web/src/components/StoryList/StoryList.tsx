@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { PAGE_SIZE } from '@yahn/schema'
 import type { Story } from '@yahn/schema'
-import { timeAgo } from '../../lib/time.ts'
+import { pluralize, timeAgo } from '../../lib/time.ts'
 import styles from './StoryList.module.css'
 
 type StoryListProps = {
@@ -34,7 +34,7 @@ function StoryRow({ story, rank }: StoryRowProps) {
       <div className={styles.content}>
         <div className={styles.titleLine}>
           {story.url ? (
-            <a data-testid="story-title" href={story.url} target="_blank" rel="noreferrer" className={styles.title}>
+            <a data-testid="story-title" href={story.url} rel="noreferrer" className={styles.title}>
               {story.title}
             </a>
           ) : (
@@ -50,11 +50,11 @@ function StoryRow({ story, rank }: StoryRowProps) {
           {story.host && <span className={styles.host}>({story.host})</span>}
         </div>
         <div className={styles.subtext}>
-          {story.score !== null && <span data-testid="story-score">{story.score} points</span>}
+          {story.score !== null && <span data-testid="story-score">{pluralize(story.score, 'point')}</span>}
           {story.by && <span>by {story.by}</span>}
           <time dateTime={iso}>{timeAgo(story.time)}</time>
           <Link data-testid="story-comments" to="/item/$id" params={{ id: story.id }} className={styles.comments}>
-            {commentCount} comments
+            {pluralize(commentCount, 'comment')}
           </Link>
         </div>
       </div>

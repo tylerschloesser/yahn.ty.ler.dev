@@ -19,3 +19,8 @@ export function timeAgo(unixSeconds: number): string {
   }
   return formatter.format(-diffSeconds, 'second')
 }
+
+/** "1 comment", "0 comments" — HN's own wording, and it does pluralize. */
+export function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}

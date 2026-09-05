@@ -1,6 +1,6 @@
 import type { Story } from '@yahn/schema'
 import { sanitizeHnHtml } from '../../lib/html.ts'
-import { timeAgo } from '../../lib/time.ts'
+import { pluralize, timeAgo } from '../../lib/time.ts'
 import styles from './StoryHeader.module.css'
 
 type StoryHeaderProps = {
@@ -17,7 +17,7 @@ export function StoryHeader({ story, truncated }: StoryHeaderProps) {
       <div className={styles.titleLine}>
         {story.url ? (
           <h1 className={styles.title}>
-            <a data-testid="story-title" href={story.url} target="_blank" rel="noreferrer" className={styles.link}>
+            <a data-testid="story-title" href={story.url} rel="noreferrer" className={styles.link}>
               {story.title}
             </a>
           </h1>
@@ -29,10 +29,10 @@ export function StoryHeader({ story, truncated }: StoryHeaderProps) {
         {story.host && <span className={styles.host}>({story.host})</span>}
       </div>
       <div className={styles.subtext}>
-        {story.score !== null && <span data-testid="story-score">{story.score} points</span>}
+        {story.score !== null && <span data-testid="story-score">{pluralize(story.score, 'point')}</span>}
         {story.by && <span>by {story.by}</span>}
         <time dateTime={iso}>{timeAgo(story.time)}</time>
-        <span>{commentCount} comments</span>
+        <span>{pluralize(commentCount, 'comment')}</span>
       </div>
       {truncated && (
         <output className={styles.truncated}>

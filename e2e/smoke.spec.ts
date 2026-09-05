@@ -47,10 +47,15 @@ test('a story opens a nested comment tree', async ({ page }) => {
   await page.locator(`${story} [data-testid="story-comments"]`).nth(busiest!.index).click()
 
   await expect(page).toHaveURL(/\/item\/\d+$/)
-  await expect(page.locator('[data-testid="story-title"]')).toBeVisible()
 
+  // Wait on the comment tree, not the title: the router keeps the previous
+  // route mounted while the loader is in flight, so the URL changes a beat
+  // before the feed stops being what is on screen.
   const comments = page.locator('[data-testid="comment"]')
   await expect(comments.first()).toBeVisible()
+
+  // One story title, not thirty — proof the feed really is gone.
+  await expect(page.locator('[data-testid="story-title"]')).toHaveCount(1)
 
   // The tree, not a flat list: at least one comment nested inside another.
   // The busiest thread on HN's front page always has replies.

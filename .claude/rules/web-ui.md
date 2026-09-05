@@ -56,6 +56,12 @@ stylelint config.
   inert element, not a broken link.
 - **Vite plugin order matters.** `tanstackRouter()` must come before `react()` or generated
   route modules are not transformed.
+- **The router keeps the previous route mounted while a loader is in flight.** So the URL
+  changes a beat before the old page stops being what is on screen — a Playwright assertion
+  that waits on the URL and then queries the DOM will find the *previous* route's elements.
+  Wait on something only the new route renders.
+- **External links do not open in a new tab.** HN opens them in the same tab, and a `_blank`
+  that does not announce itself is an a11y failure. `rel="noreferrer"` yes, `target` no.
 - **TanStack Query owns all caching.** Router `loader`s call `queryClient.ensureQueryData` and
   components use `useSuspenseQuery`; `defaultPreloadStaleTime: 0` is what keeps there being
   exactly one cache rather than the router keeping a second.
