@@ -1,6 +1,12 @@
-import { Link, Outlet, createRootRouteWithContext, useNavigate } from '@tanstack/react-router'
+import {
+  Link,
+  Outlet,
+  createRootRouteWithContext,
+  useNavigate,
+  useSearch,
+} from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import type { FormEvent } from 'react'
 import { SECTIONS } from '../feeds.ts'
 import styles from './__root.module.css'
 
@@ -19,13 +25,18 @@ const activeProps = { 'data-active': '' }
 
 function RootLayout() {
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
+  // `strict: false` reads `q` from whichever matched route declares it (only
+  // `/search`) and is `undefined` everywhere else — the root layout sits
+  // above `/search` in the tree, so it cannot use that route's own
+  // `useSearch()`.
+  const activeQuery = useSearch({ strict: false, select: (search) => search.q ?? '' })
 
   // A real <form> so Enter submits for free and the control is announced as
   // search — not a keydown listener on the input. Navigating with only `q`
   // (no `sort`/`p`) is what keeps the URL clean for a fresh search.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const query = String(new FormData(event.currentTarget).get('q') ?? '')
     void navigate({ to: '/search', search: { q: query } })
   }
 
@@ -57,11 +68,16 @@ function RootLayout() {
             <label htmlFor="header-search-input" className={styles.searchLabel}>
               Search
             </label>
+            {/* Uncontrolled and keyed on the URL's query: remounting on
+                navigation (back/forward, a link to a different query) is what
+                keeps the box in sync without fighting the user's own typing
+                between submits. */}
             <input
+              key={activeQuery}
               id="header-search-input"
+              name="q"
               type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              defaultValue={activeQuery}
               placeholder="Search HN…"
               data-testid="search-input"
               className={styles.searchInput}

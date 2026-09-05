@@ -58,8 +58,28 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # `pnpm e2e` is in the allowlist below, and without the browser it would
+      # fail on its first run every time. ~30s, paid on runs that never use it,
+      # which is cheaper than a run that cannot check its own UI work.
+      - run: pnpm exec playwright install --with-deps chromium
+
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # `pnpm verify` is the whole point: it is lint + typecheck + test +
+          # build, it is what every other job in this repo runs, and it needs
+          # no credentials. Its four parts are listed too, because a run that
+          # only wants to re-check types should not have to run the lot.
+          #
+          # `pnpm e2e` boots its own dev servers and drives a real browser
+          # against live HN. Without it a run cannot check its own UI work and
+          # has to guess, which is exactly what happened the first time this
+          # workflow ran: it shipped a correct fix it could not verify, and
+          # said so.
+          #
+          # `gh issue`/`gh pr` reads are here so a run that finds something
+          # outside its task can use the `file-issue` skill instead of
+          # dropping the finding — the first run could not, and had to leave
+          # it in a comment.
           claude_args: |
-            --allowedTools "Bash(pnpm lint),Bash(pnpm lint:fix),Bash(pnpm typecheck),Bash(pnpm build)"
+            --allowedTools "Bash(pnpm verify),Bash(pnpm lint),Bash(pnpm lint:fix),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm build),Bash(pnpm e2e),Bash(pnpm e2e:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh label list:*)"

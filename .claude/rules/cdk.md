@@ -136,10 +136,26 @@ existing preview is far quicker — only its first creation is slow.
 ## claude.yml
 
 thai's file, on node 24: the Claude Code GitHub Action, interactive mode, gated on `@claude`.
-**Committed but never run here** — it needs a `CLAUDE_CODE_OAUTH_TOKEN` secret (`claude
-setup-token`, chosen over an API key because the account's carries no credit) and the Claude
-GitHub App installed; neither exists on this repo. It also triggers on `issues: opened`, so an
-issue whose body contains `@claude` starts a run when created.
+**Proven 2026-09-05** — it fixed issue #4 end to end, pushing `claude/issue-4-*`. It needs the
+`CLAUDE_CODE_OAUTH_TOKEN` secret (`claude setup-token`, chosen over an API key because the
+account's carries no credit) and the Claude GitHub App; both are in place. It also triggers on
+`issues: opened`, so an issue whose body contains `@claude` starts a run when created — which is
+why the `file-issue` skill forbids that phrase in a title or body. **A comment is how you start
+a run**, and Claude may write that comment.
+
+Three things its first run taught, all now fixed here:
+
+- **`--allowedTools` is a second, narrower allowlist than `.claude/settings.json`,** and the
+  run obeys the intersection. It started with lint/typecheck/build only, so the run could not
+  execute `pnpm test` or `pnpm e2e` and shipped a correct fix it had no way to verify. It now
+  carries `pnpm verify`, `pnpm e2e`, and the `gh issue`/`gh pr` reads the `file-issue` skill
+  needs — without those the run could not even file a ticket about being unable to test, and had
+  to leave the finding in a comment. **If you add a check to `pnpm verify`, check this line too.**
+- **`pnpm e2e` needs `playwright install --with-deps chromium`,** which `ci.yml` does and this
+  workflow did not. An allowlist entry without the browser is a false promise.
+- **Every run costs two workflow runs.** The action posts its own "Claude Code is working…"
+  comment, which fires `issue_comment: created` again; the second run evaluates the `if:` and
+  reports `skipped`. Normal, not a loop, and not worth guarding against.
 
 ## Lambda memory: 512 stays, and why the 1024 experiment proved less than it looked
 

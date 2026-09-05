@@ -24,6 +24,9 @@ test('the header search box runs a query and lists story rows', async ({ page })
   // The heading, not the rows: the feed is still mounted while the search
   // loader is in flight.
   await expect(page.getByTestId('search-heading')).toContainText('rust')
+  // The box is the control that produced this page — it must show what
+  // produced it, not go blank the moment the query lands in the URL.
+  await expect(page.getByTestId('search-input')).toHaveValue('rust')
 
   const rows = page.locator(story)
   await expect(rows.first()).toBeVisible()
@@ -31,6 +34,16 @@ test('the header search box runs a query and lists story rows', async ({ page })
   // so the result list is full rather than a stub.
   await expect(rows).toHaveCount(30)
   await expect(rows.locator('[data-testid="story-title"]')).toHaveCount(30)
+
+  // A second search, then back: the box has to track navigation, not just
+  // the initial load.
+  await page.getByTestId('search-input').fill('python')
+  await page.getByTestId('search-input').press('Enter')
+  await expect(page.getByTestId('search-heading')).toContainText('python')
+
+  await page.goBack()
+  await expect(page.getByTestId('search-heading')).toContainText('rust')
+  await expect(page.getByTestId('search-input')).toHaveValue('rust')
 })
 
 test('a query with no hits says so instead of rendering an empty list', async ({ page }) => {
