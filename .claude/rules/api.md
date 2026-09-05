@@ -25,7 +25,13 @@ Loaded when you touch the API or the shared schema.
 - **Cache-Control is where this Lambda earns its keep.** CloudFront honors what the origin sets,
   so a cached front page is one edge hit instead of 31 HN requests. Feeds are `max-age=30`,
   items `max-age=60`, both with `stale-while-revalidate` so a rerank never costs a viewer full
-  origin latency. This is a deliberate deviation from thai.ler.dev, which uses
+  origin latency.
+- **Set the cache header *after* the upstream call resolves, and `no-store` on every non-2xx.**
+  A header set before the `await` is still on the response when the call throws, so one HN blip
+  goes out as a 502 carrying `max-age=30` — and once CloudFront caching is on, that outage is
+  cached at every edge for thirty seconds and served stale for another three hundred. This was a
+  real bug, invisible until the CDN existed. Do not "tidy" the header back to the top of a
+  handler. This is a deliberate deviation from thai.ler.dev, which uses
   `CACHING_DISABLED` on `/api/*` — correct for a per-user sync API, wrong for a public
   read-only one. Do not "fix" it back.
 - **`getUserId(c)` in `src/auth.ts` is the only place the API learns who is calling.** It

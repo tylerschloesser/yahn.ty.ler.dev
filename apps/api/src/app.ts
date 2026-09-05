@@ -27,6 +27,13 @@ type Variables = { userId: string | null }
  * requests. The numbers are short because HN reranks continuously;
  * `stale-while-revalidate` is what keeps a rerank from ever costing a viewer
  * the full origin latency.
+ *
+ * **Every handler sets its header after the upstream call resolves, never
+ * before.** A header set first is still on the response when the call throws,
+ * so a single HN blip would go out as a 502 carrying `max-age=30` and
+ * CloudFront would cache the outage at every edge for thirty seconds and serve
+ * it stale for another three hundred. `notFound` and `onError` below say
+ * `no-store` for the same reason.
  */
 const CACHE = {
   feed: 'public, max-age=30, stale-while-revalidate=300',
@@ -60,9 +67,11 @@ function validate<Target extends 'param' | 'query', Schema extends z.ZodType>(
   target: Target,
   schema: Schema,
 ) {
-  return zValidator(target, schema, (result, c) =>
-    result.success ? undefined : c.json({ error: z.prettifyError(result.error) }, 400),
-  )
+  return zValidator(target, schema, (result, c) => {
+    if (result.success) return undefined
+    c.header('Cache-Control', 'no-store')
+    return c.json({ error: z.prettifyError(result.error) }, 400)
+  })
 }
 
 export function createApp(): Hono<{ Variables: Variables }> {
@@ -87,8 +96,9 @@ export function createApp(): Hono<{ Variables: Variables }> {
     async (c) => {
       const { feed } = c.req.valid('param')
       const { page } = c.req.valid('query')
+      const body = await getFeed(feed, page)
       c.header('Cache-Control', CACHE.feed)
-      return c.json(await getFeed(feed, page))
+      return c.json(body)
     },
   )
 
@@ -97,14 +107,16 @@ export function createApp(): Hono<{ Variables: Variables }> {
     validate('param', IdSchema),
     async (c) => {
       const { id } = c.req.valid('param')
+      const body = await getItem(id)
       c.header('Cache-Control', CACHE.item)
-      return c.json(await getItem(id))
+      return c.json(body)
     },
   )
 
   app.get('/api/v1/users/:id', async (c) => {
+    const user = await getUser(c.req.param('id'))
     c.header('Cache-Control', CACHE.user)
-    return c.json({ user: await getUser(c.req.param('id')) })
+    return c.json({ user })
   })
 
   app.get(
@@ -112,12 +124,16 @@ export function createApp(): Hono<{ Variables: Variables }> {
     validate('query', SearchSchema),
     async (c) => {
       const { q, page, sort } = c.req.valid('query')
+      const body = await search({ query: q, page, sort })
       c.header('Cache-Control', CACHE.search)
-      return c.json(await search({ query: q, page, sort }))
+      return c.json(body)
     },
   )
 
-  app.notFound((c) => c.json({ error: 'not found' }, 404))
+  app.notFound((c) => {
+    c.header('Cache-Control', 'no-store')
+    return c.json({ error: 'not found' }, 404)
+  })
 
   /**
    * Upstream failure is not this API's failure. A `NotFoundError` means HN
@@ -127,6 +143,7 @@ export function createApp(): Hono<{ Variables: Variables }> {
    * that sees 500 would reasonably blame us and stop retrying.
    */
   app.onError((error, c) => {
+    c.header('Cache-Control', 'no-store')
     if (error instanceof NotFoundError) return c.json({ error: error.message }, 404)
     if (error instanceof UpstreamError) {
       console.error('upstream failure', error.message, error.cause)
