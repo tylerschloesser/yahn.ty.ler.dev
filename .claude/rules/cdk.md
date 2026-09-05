@@ -141,22 +141,31 @@ setup-token`, chosen over an API key because the account's carries no credit) an
 GitHub App installed; neither exists on this repo. It also triggers on `issues: opened`, so an
 issue whose body contains `@claude` starts a run when created.
 
-## Lambda memory: 512 is measured, and 1024 was rejected
+## Lambda memory: 512 stays, and why the 1024 experiment proved less than it looked
 
-Measured 2026-09-05 on the `pr-3` preview, item 49563355 (1,603 nodes, 718KB), with a random
-`?cb=` per request so every one reached the origin — the `/api/*` cache policy keys on the full
-query string, which is how you force a miss.
+1024MB was deployed to a preview and compared against 512MB on item 49563355 (1,603 nodes,
+718KB), cache-busted with a random `?cb=` per request — the `/api/*` cache policy keys on the
+full query string, which is how you force an origin miss.
 
-| | 512MB | 1024MB |
+| | 512MB (n=3) | 1024MB (n=3) |
 | --- | --- | --- |
-| origin miss, warm Lambda | 2.71 / 2.92 / 2.95s | 2.42 / 2.56 / 2.63s |
-| GB-s billed per request | 1.50 | **2.61** |
+| origin miss | 2.71 / 2.92 / 2.95s | 2.42 / 2.56 / 2.63s |
+| GB-s per request | 1.50 | 2.61 |
 
-**11% faster for 74% more GB-ms**, so 512 stays. The hypothesis that motivated trying it — that
-1,600 concurrent fetches plus a 718KB serialize are CPU-bound at ~0.3 vCPU — is wrong. The
-endpoint is latency-bound on Firebase, and no amount of vCPU makes HN answer sooner; the gap
-against a laptop's 1.6s is Lambda's network path.
+That reads as 11% faster for 74% more money — **but ten samples taken later against production,
+same code and same memory, ran 3.69–4.88s with one at 27s.** Run-to-run variance on this endpoint
+is wider than the gap the experiment measured, so **the experiment does not show that 1024 is
+faster.** It shows only that if there is a difference it is small, while the 74% cost is certain.
 
-Not settled, and where to look next: the one *cold-start* sample was 5.65s at 512 and 3.45s at
-1024. n=1 each, so it proves nothing — but this site's traffic means most origin requests hit a
-cold Lambda, so that is the number to measure properly, not the steady state above.
+512 therefore stays — a decision on *absence of demonstrated benefit*, not on a measured
+regression. If it is ever revisited, the way to do it properly is many samples interleaved
+between the two sizes in the same minutes, not three of each an hour apart. The hypothesis that
+motivated the experiment (1,600 fetches plus a 718KB serialize being CPU-bound at ~0.3 vCPU) is
+still unsupported: this endpoint waits on Firebase.
+
+**The `timeout: Duration.seconds(30)` is closer to being hit than it looks.** One of those ten
+production samples took **27s** — a Lambda cold start on the biggest thread on HN. That is 3
+seconds of headroom, and `descendants` on a busy thread only grows. If items start returning 502s
+in bursts, this is the first thing to check, and raising the timeout is the wrong first move: the
+node cap (`HN_TREE_NODE_CAP`, 2000) and `truncated` exist precisely so a huge thread degrades
+into a prefix rather than into an error.

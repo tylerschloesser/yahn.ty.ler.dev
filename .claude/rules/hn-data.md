@@ -55,24 +55,42 @@ price of wrong sibling order everywhere.
 ## Concurrency is the lever, not request count
 
 Measured 2026-09-05 on thread 49563355 (1,603 nodes, depth 15) through the real API, varying
-`HN_TREE_CONCURRENCY` and nothing else:
+`HN_TREE_CONCURRENCY` and nothing else. **These four are single samples from a laptop**, so read
+the shape, not the digits:
 
 | concurrency | 24 | 64 | 128 | 192 |
 | --- | --- | --- | --- | --- |
 | wall clock | 5.2s | 2.4s | **1.6s** | 1.5s |
 
-Flat past 128, so 128 is the knee and is the default. All four runs returned the **identical
-1,603 nodes in the identical order with zero upstream errors** — this widens the pipe, it does
-not change what the walk produces.
+Flat past 128, so 128 is the default. All four returned the **identical 1,603 nodes in the
+identical order with zero upstream errors** — this widens the pipe, it does not change what the
+walk produces, which is the part that made it safe to take.
 
-That is what settles the cheaper-tree question above. On this thread 665 of the 1,603 nodes are
-non-leaf, so Algolia-plus-`kids` would be 666 requests rather than 1,604 — 2.4x fewer, and it
+**In production the same change bought about 30%, not 3.3x.** Through the deployed edge on the
+same thread, cache-busted so every request reached the origin:
+
+| | before (24) | after (128) |
+| --- | --- | --- |
+| cold, origin miss | 5.44 / 5.90 / 7.47s | median **4.06s** over 10 samples, range 3.69–4.88 |
+| warm, CloudFront hit | 23–38ms | 23–38ms |
+
+The laptop overstated it because Lambda's path to Firebase is slower and more variable than a
+developer machine's, so the fixed per-request latency dominates sooner. Still worth having: it is
+one integer and it made the first viewer of a big thread wait a third less.
+
+**Two cautions the numbers above earn.** Variance is wide — one of those ten samples took 27s on
+a Lambda cold start, against a 30s function timeout (see `.claude/rules/cdk.md`). And any future
+comparison on this endpoint needs many interleaved samples, because three-of-each is inside the
+noise; a 512-vs-1024MB Lambda experiment was run that way and proved nothing.
+
+**The cheaper-tree option is still a non-choice.** On this thread 665 of the 1,603 nodes are
+non-leaf, so Algolia-plus-`kids` would be 666 requests rather than 1,604 — 2.4x fewer — and it
 buys a source that inherits Algolia's indexing lag and has to reconcile ids present in `kids` but
-missing from Algolia's tree. Raising the concurrency bought 3.3x for one integer and no new code
-path. **Do not build the third source without a measurement that beats 1.6s.**
+missing from Algolia's tree. **Do not build it without a measurement that beats a 4.1s median
+cold**, taken the same way.
 
 Firebase publishes no rate limit and none was hit at 192. If one ever appears, this is the first
-number to turn down, and `truncated` already exists for the case where a walk has to stop early.
+number to turn down, and `truncated` already exists for a walk that has to stop early.
 
 ## Invariants
 
