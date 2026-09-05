@@ -21,6 +21,10 @@ stylelint config.
 - **Styling is CSS Modules only** (`X.module.css` beside `X.tsx`), class names camelCase because
   they are read as `styles.someClass`. Variants go on `data-*` attributes styled as
   `[data-variant='…']`, never a className map.
+- **A boolean `data-*` attribute is `data-x=""` when true and absent when false**, written
+  `{...(flag ? { 'data-x': '' } : {})}`. `data-x={true}` renders as `data-x="true"`, which the
+  CSS `[data-x]` selector still matches but a Playwright `toHaveAttribute('data-x', '')` does
+  not — so the two conventions look identical until a test disagrees with the DOM.
 - **Two token layers.** `src/styles/primitives.css` is nothing but Radix Colors `@import`s —
   `sand` (neutral) + `orange` (accent), which gives HN's character without hardcoding
   `#ff6600` — plus `red` and `black-alpha`. Components reference `src/styles/tokens.css`
