@@ -7,8 +7,10 @@ the data model. pnpm monorepo: `packages/schema` (`@yahn/schema`, the zod contra
 on Lambda) and `apps/web` (`@yahn/web`, Vite + React). `README.md` has the layout and the *why*.
 This file and `.claude/rules/` hold what must stay true.
 
-> Infrastructure (`infra/cdk`, `.github/workflows/`) is Epoch 2 and does not exist yet.
-> Everything here is verifiable on `localhost` with no AWS and no credentials.
+`infra/cdk` (`@yahn/cdk`) holds three stacks and `.github/workflows/` deploys them.
+
+> Everything *except* those two directories is verifiable on `localhost` with no AWS and no
+> credentials, and that stays true: `pnpm verify`, `pnpm dev` and `pnpm e2e` never touch AWS.
 
 ## Context files
 
@@ -23,6 +25,7 @@ than waiting for it to load.
 | `api.md` | `apps/api/**`, `packages/schema/**` | thin handlers, error mapping, cache headers, the enrichment/auth/DynamoDB seams |
 | `web-ui.md` | `apps/web/**` | tokens, CSS Modules, Base UI, `data-*` variants, Query-owns-cache |
 | `testing.md` | `e2e/**`, `**/*.test.ts` | offline vitest, structural-not-content Playwright, pointing it at a preview |
+| `cdk.md` | `infra/cdk/**`, `.github/workflows/**` | the three stacks, the shared cert, the CloudFront gotchas, the preview lifecycle, what deploys locally only |
 
 **`docs/hn-api.md` is the canonical HN API reference** — every endpoint, every field per item
 type, the tombstone shapes, measured request counts and latencies. It was mined from the

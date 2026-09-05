@@ -5,6 +5,7 @@
     { "path": "./packages/hn" },
     { "path": "./apps/api" },
     { "path": "./apps/web" },
+    { "path": "./infra/cdk" },
     { "path": "./tsconfig.e2e.json" }
   ]
 }
