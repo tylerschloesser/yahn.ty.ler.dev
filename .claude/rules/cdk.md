@@ -24,17 +24,16 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
 | `YahnAppStack-{prod,pr-N}` | `deploy.yml` / `pr-preview.yml` | bucket, Lambda, CloudFront, DNS |
 
 - **`YahnGithubOidcStack` never deploys from CI** — it grants CI the trust CI would need to
-  deploy it. `deploy.yml` deliberately omits it, and a grep in that file is the acceptance
-  check that it stays omitted.
+  deploy it. No workflow names it, and a grep proving that is part of the workflows' own check.
 - **It imports the OIDC provider, never creates one.** One provider per issuer per account, and
   `ThaiLerDevGithubOidcStack` already made it. `new iam.OpenIdConnectProvider(...)` here is the
   single most likely first-deploy failure.
 - Its trust carries **four** `sub` values: the legacy and immutable forms of both
   `ref:refs/heads/main` and `pull_request`. Which form GitHub emits is a property of the repo,
-  not of the policy, so both stay. The role's only permission is `sts:AssumeRole` on the CDK
-  bootstrap roles, which is why it needs no revision when a stack grows a resource.
-- **`YahnSharedStack` exists so previews never wait on certificate issuance.** That is the whole
-  point; it took 160s to issue, and a preview is supposed to be ~5 minutes end to end.
+  not of the policy, so both stay. Both paths are proven — `deploy.yml` and `pr-preview.yml` have
+  each assumed the role.
+- **`YahnSharedStack` exists so previews never wait on certificate issuance** — 160s to issue,
+  against a preview that is supposed to be about six minutes end to end.
 - **The certificate ARN is hard-coded in `bin/app.ts`.** An `Fn::ImportValue` would couple every
   preview to the shared stack and block deleting a preview while the export is in use; SSM would
   put an untested dynamic reference inside CloudFront's `ViewerCertificate`. Recreating the
@@ -53,10 +52,9 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
   app like any other CDK command.
 - `esbuild` is a **root** devDependency, not this package's: `NodejsFunction` runs the bundler
   from the workspace root where the lockfile is. Without it CDK silently falls back to Docker.
-  The root `package.json` records this in a `"//"` key — don't drop it in a manifest rewrite.
 - `apps/api/src/lambda.ts` imports `@yahn/hn` and `@yahn/schema` as workspace **source** through
-  their `exports` maps. esbuild must bundle them: never add them to `externalModules`. No
-  `depsLockFilePath` — `NodejsFunction` walks up and finds the root lockfile on its own.
+  their `exports` maps. esbuild must bundle them: never add them to `externalModules`, and no
+  `depsLockFilePath` — `NodejsFunction` finds the root lockfile on its own.
 
 ## Four CloudFront gotchas, each of which cost thai.ler.dev a debugging session
 
@@ -100,6 +98,10 @@ worker here, which is also why nothing goes in `apps/web/public/` that might be 
 
 `pr-preview.yml` (open/synchronize/reopen) → `pr-teardown.yml` (close) → `cleanup.yml` (daily).
 
+Measured on the first real run: create ~6 min (the CloudFront distribution is ~4 of it, and it
+is the only resource still pending at the end), destroy ~4 min. A repeat preview deploy on the
+same PR is much faster — only the distribution's first creation is slow.
+
 - **`cancel-in-progress: false` on `pr-preview.yml` is load-bearing.** Cancelling the job does
   not cancel the CloudFormation deploy it started; the next push would then find the stack in
   `UPDATE_IN_PROGRESS` and fail. `pr-teardown.yml` shares the *same* concurrency group so a
@@ -107,20 +109,35 @@ worker here, which is also why nothing goes in `apps/web/public/` that might be 
   behind server-side.
 - **Both deploy paths poll `/api/health` before Playwright.** CloudFormation reports the stack
   complete before the new record has propagated, and Playwright burns all its retries on
-  NXDOMAIN in about two seconds.
-- **`cleanup.yml` is the only scheduled thing that deletes, and it has two independent guards**:
-  the `YahnAppStack-pr-` prefix filter and an anchored `^[0-9]+$` on what follows it. Together
-  they reject `YahnAppStack-prod` (no trailing hyphen) *and* `YahnAppStack-pr-x`. **Neither may
-  be loosened**, and a change to either is re-validated against `aws cloudformation list-stacks`
-  before it merges. It uses raw `delete-stack` rather than CDK: the list comes from AWS, not from
-  the app, and the stack's own `autoDeleteObjects` custom resource runs either way.
+  NXDOMAIN in about two seconds. A CI runner starts with a cold resolver so the gate is enough
+  there; **your laptop may not**, because a resolver that was asked for `pr-<N>` before the
+  record existed caches the NXDOMAIN. `dig` bypasses that cache and will disagree with `curl`
+  and Playwright. Confirm with `curl --resolve pr-<N>.yahn.ty.ler.dev:443:<ip>` before believing
+  a local failure is the preview's fault.
+- **`cleanup.yml` is the only scheduled thing that deletes, and it has three independent guards.**
+  Two are in the workflow — the `YahnAppStack-pr-` prefix filter and an anchored `^[0-9]+$` on
+  what follows it, which together reject `YahnAppStack-prod` (no trailing hyphen) *and*
+  `YahnAppStack-pr-x`. The third is IAM, and it is the one that matters: the deploy role's
+  `cloudformation:DeleteStack` is scoped to `stack/YahnAppStack-pr-*`, so a bug in that shell
+  loop still cannot reach `YahnAppStack-prod` or `ThaiLerDevSiteStack`. Verified by
+  `aws iam simulate-principal-policy` rather than by deleting anything — `pr-1` allowed,
+  everything else `implicitDeny`; re-run that simulation rather than trusting this line.
+  **None may be loosened.** It uses raw `delete-stack` rather than CDK: the list comes from AWS,
+  not from the app, and the stack's own `autoDeleteObjects` custom resource runs either way.
+- **The deploy role's permissions are not just `sts:AssumeRole`, and the exception is deliberate.**
+  `cdk deploy`/`destroy` assume the CDK bootstrap roles, so they need nothing else — but
+  `cleanup.yml` calls CloudFormation *directly as this role*, which is why the role also carries
+  `ListStacks` (on `*`; the action supports no resource-level permissions) and the scoped
+  `DescribeStacks`/`DeleteStack` above. Its first scheduled-style run failed with
+  `AccessDenied ... cloudformation:ListStacks` for exactly this reason. `YahnGithubOidcStack`
+  deploys **locally**, so granting this is a hand deploy, never a workflow.
 - Fork PRs get no preview, and that is correct: GitHub will not grant `id-token: write` to a fork
   PR, so the deploy could not authenticate. Both PR workflows carry the same explicit guard.
 
 ## claude.yml
 
-thai's file, on node 24: the Claude Code GitHub Action in interactive mode on `@claude` mentions,
-authenticating with the `CLAUDE_CODE_OAUTH_TOKEN` repository secret (a subscription token from
-`claude setup-token`, chosen over an API key because the account's API key carries no credit).
-The Claude GitHub App must be installed on the repo. Because it also triggers on `issues:
-opened`, an issue whose body contains `@claude` starts a run when created.
+thai's file, on node 24: the Claude Code GitHub Action, interactive mode, gated on `@claude`.
+**Committed but never run here** — it needs a `CLAUDE_CODE_OAUTH_TOKEN` secret (`claude
+setup-token`, chosen over an API key because the account's carries no credit) and the Claude
+GitHub App installed; neither exists on this repo. It also triggers on `issues: opened`, so an
+issue whose body contains `@claude` starts a run when created.

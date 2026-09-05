@@ -59,6 +59,38 @@ export class GithubOidcStack extends Stack {
       }),
     )
 
+    // The exception to "only sts:AssumeRole", and the reason it is worth making
+    // one. `cleanup.yml` sweeps up preview stacks whose PR has closed, and it
+    // talks to CloudFormation *directly* rather than through CDK — the stack
+    // list comes from AWS, not from the app, so there is nothing to synthesize
+    // against. Direct calls run as this role, which otherwise cannot see a
+    // stack at all.
+    //
+    // Scoping `DeleteStack` to `YahnAppStack-pr-*` makes IAM enforce what the
+    // workflow's prefix filter and `^[0-9]+$` guard merely assert. A bug in
+    // that shell loop — or a rewrite of it — still cannot reach
+    // `YahnAppStack-prod`, `ThaiLerDevSiteStack`, or `CDKToolkit`. That is the
+    // guard worth having, because it is the one that cannot be edited away by
+    // someone touching only the workflow.
+    //
+    // `ListStacks` supports no resource-level permissions, hence the `*`; it is
+    // read-only and returns names, which is exactly what the sweep needs.
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudformation:ListStacks'],
+        resources: ['*'],
+      }),
+    )
+
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudformation:DescribeStacks', 'cloudformation:DeleteStack'],
+        resources: [
+          `arn:aws:cloudformation:${this.region}:${this.account}:stack/YahnAppStack-pr-*`,
+        ],
+      }),
+    )
+
     new CfnOutput(this, 'GithubDeployRoleArn', { value: role.roleArn })
   }
 }
