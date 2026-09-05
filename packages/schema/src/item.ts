@@ -108,3 +108,47 @@ export const UserSchema = z.looseObject({
 })
 
 export type User = z.output<typeof UserSchema>
+
+/**
+ * One row of an author's history. Algolia's `tags=author_X` returns stories
+ * and comments interleaved in one result set, and they are genuinely
+ * different shapes — a story hit has `title`/`url`/`num_comments` and a
+ * comment hit has `comment_text`/`story_title`/`story_url` instead.
+ *
+ * This flattens both into one shape rather than a union, because the UI
+ * renders them as one chronological list and every difference between them is
+ * expressible as a `null`. `kind` says which it is.
+ *
+ * Deliberately not `Story | Comment`: a comment hit carries no `children`
+ * (Algolia returns descendant ids there, not a tree) and needs the *parent
+ * story's* title to be readable at all, which `Comment` has nowhere to put.
+ */
+export const AuthorItemSchema = z.looseObject({
+  ...ItemBase,
+  kind: z.enum(['story', 'comment']),
+
+  /** A story's own title, or the title of the story a comment sits under. */
+  title: z.string().nullable(),
+
+  /** The story's link. `null` on a self post and on every comment. */
+  url: z.string().nullable(),
+  host: z.string().nullable(),
+
+  /** Self-post body or comment body, HN-flavored HTML. */
+  text: z.string().nullable(),
+
+  /** `null` on comments: Algolia publishes no comment score, and nor does HN. */
+  score: z.number().int().nullable(),
+
+  /** A story's comment count. `null` on a comment. */
+  descendants: z.number().int().nullable(),
+
+  /**
+   * The thread this row belongs to — the story's own id for a story, the
+   * enclosing story for a comment. This is what a row links to, so it is the
+   * one field the UI cannot do without.
+   */
+  storyId: z.number().int().nullable(),
+})
+
+export type AuthorItem = z.output<typeof AuthorItemSchema>

@@ -581,6 +581,41 @@ Only `username`, `about`, `karma`. **No `created`, no `submitted`.** (The docs' 
 types `karma` as a string, `99999`; the live response returns a number.) For account age use
 Firebase `user/:id`; for submission history use Algolia `tags=author_X`.
 
+### Author history — `search_by_date?tags=author_:USERNAME`
+
+Probed live 2026-09-05 on `tags=author_pg`, and again on `tags=author_tptacek,story` and
+`tags=ask_hn`. This is a **search** endpoint, so the envelope is the search envelope; there is no
+`query` parameter involved.
+
+Stories and comments come back **interleaved in one result set**, newest first, and they are
+genuinely different shapes. Observed key sets:
+
+| | story hit | comment hit |
+| --- | --- | --- |
+| identity | `objectID`, `created_at_i`, `created_at`, `updated_at`, `author`, `_tags` | same |
+| title | `title` | **absent** — `story_title` instead, the *enclosing* story's title |
+| link | `url` | **absent** — `story_url` instead |
+| body | `story_text` | **absent** — `comment_text` instead |
+| score | `points` (number) | `points` (**always `null`**) |
+| replies | `num_comments` | **absent** |
+| thread | `story_id` (its own id) | `story_id`, plus `parent_id` |
+| `children` | **present on some hits, absent on others** | same |
+
+**`story_text` is absent entirely on a link story here**, not `null` — the same
+null-versus-omitted inconsistency Epoch 1 hit on `?query=…&tags=story`, now confirmed on a third
+endpoint. On a self post (`tags=ask_hn` probe) `story_text` is present and **`url` is the absent
+one**. Treat "absent" and "`null`" as the same thing for every field except `objectID` and
+`created_at_i`.
+
+`_tags` carries the type as its first entries: `["comment","author_pg","story_39662615"]`,
+`["story","author_pg","story_37278345"]`, `["show_hn","story","author_x","story_y"]`. Branch on
+`_tags`, not on which body field happens to be present.
+
+**`nbHits` and `nbPages` disagree, correctly.** `tags=author_pg&hitsPerPage=50` returned
+`nbHits: 10723` with `nbPages: 20` — Algolia has already clamped `nbPages` to the 1,000-hit
+ceiling documented above. Pass both through; a UI that computes pages from `nbHits` will offer
+links to pages that error.
+
 ### Rate limits
 
 Verbatim from the docs:

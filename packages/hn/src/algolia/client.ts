@@ -2,8 +2,10 @@ import { env } from '../env.ts'
 import { NotFoundError, UpstreamError } from '../errors.ts'
 import { fetchJson } from '../http.ts'
 import {
+  AlgoliaAuthorResponseSchema,
   AlgoliaNodeSchema,
   AlgoliaSearchResponseSchema,
+  type AlgoliaAuthorResponse,
   type AlgoliaNode,
   type AlgoliaSearchResponse,
 } from './types.ts'
@@ -45,4 +47,31 @@ export async function search(params: AlgoliaSearchParams): Promise<AlgoliaSearch
 
   const { body } = await fetchJson<unknown>(`${env.algoliaBaseUrl}/${endpoint}?${query.toString()}`)
   return AlgoliaSearchResponseSchema.parse(body)
+}
+
+export type AlgoliaAuthorParams = {
+  author: string
+  type?: 'all' | 'story' | 'comment'
+  page?: number
+  hitsPerPage?: number
+}
+
+/**
+ * Always `search_by_date`: a profile is a timeline, and relevance ranking is
+ * meaningless with no `query`. `tags` combines with a comma, which is AND in
+ * Algolia's tag grammar (docs/hn-api.md) — `author_X,story` narrows to that
+ * author's stories, not stories OR that author.
+ */
+export async function getAuthorItems(params: AlgoliaAuthorParams): Promise<AlgoliaAuthorResponse> {
+  const tags =
+    params.type === 'story' || params.type === 'comment'
+      ? `author_${params.author},${params.type}`
+      : `author_${params.author}`
+
+  const query = new URLSearchParams({ tags })
+  if (params.page !== undefined) query.set('page', String(params.page))
+  if (params.hitsPerPage !== undefined) query.set('hitsPerPage', String(params.hitsPerPage))
+
+  const { body } = await fetchJson<unknown>(`${env.algoliaBaseUrl}/search_by_date?${query.toString()}`)
+  return AlgoliaAuthorResponseSchema.parse(body)
 }

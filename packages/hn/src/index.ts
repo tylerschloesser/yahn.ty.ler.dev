@@ -1,4 +1,5 @@
 export * as algolia from './algolia/client.ts'
+export { getAuthorItems } from './author.ts'
 export { contentKey } from './content-key.ts'
 export { env } from './env.ts'
 export * from './errors.ts'

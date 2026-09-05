@@ -1,5 +1,5 @@
-import type { Comment, Story } from '@yahn/schema'
-import type { AlgoliaNode, AlgoliaStoryHit } from './algolia/types.ts'
+import type { AuthorItem, Comment, Story } from '@yahn/schema'
+import type { AlgoliaAuthorHit, AlgoliaNode, AlgoliaStoryHit } from './algolia/types.ts'
 import { contentKey } from './content-key.ts'
 import type { FirebaseItem } from './firebase/types.ts'
 import { hostFromUrl } from './host.ts'
@@ -84,6 +84,58 @@ export function storyFromAlgoliaHit(hit: AlgoliaStoryHit): Story {
     text,
     score: hit.points ?? null,
     descendants: hit.num_comments ?? null,
+  }
+}
+
+/**
+ * `_tags` is what Algolia indexes on, so it's what decides `kind` — not
+ * `comment_text`, which a story hit will also simply lack.
+ */
+export function authorItemFromAlgoliaHit(hit: AlgoliaAuthorHit): AuthorItem {
+  const id = Number(hit.objectID)
+  const isComment = hit._tags.includes('comment')
+
+  if (isComment) {
+    return {
+      id,
+      by: hit.author ?? null,
+      time: hit.created_at_i,
+      contentKey: contentKey(null, hit.comment_text ?? null),
+      // Same reasoning as storyFromAlgoliaHit: a search hit is never a
+      // tombstone in practice, and Algolia's hit shape has no such flag.
+      deleted: false,
+      dead: false,
+      kind: 'comment',
+      title: hit.story_title ?? null,
+      url: null,
+      host: null,
+      text: hit.comment_text ?? null,
+      // Algolia always gives comments points: null; never pass one through
+      // even if it were somehow set, same as commentFromAlgoliaNode.
+      score: null,
+      descendants: null,
+      storyId: hit.story_id ?? null,
+    }
+  }
+
+  const url = normalizeUrl(hit.url)
+  const text = hit.story_text ?? null
+
+  return {
+    id,
+    by: hit.author ?? null,
+    time: hit.created_at_i,
+    contentKey: contentKey(url, text),
+    deleted: false,
+    dead: false,
+    kind: 'story',
+    title: hit.title ?? null,
+    url,
+    host: hostFromUrl(url),
+    text,
+    score: hit.points ?? null,
+    descendants: hit.num_comments ?? null,
+    storyId: id,
   }
 }
 

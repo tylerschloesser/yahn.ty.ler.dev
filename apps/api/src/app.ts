@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
-import { getFeed, getItem, getUser, search, NotFoundError, UpstreamError } from '@yahn/hn'
-import { FeedNameSchema, SearchSortSchema } from '@yahn/schema'
+import { getAuthorItems, getFeed, getItem, getUser, search, NotFoundError, UpstreamError } from '@yahn/hn'
+import { AuthorItemTypeSchema, FeedNameSchema, SearchSortSchema } from '@yahn/schema'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { getUserId } from './auth.ts'
@@ -48,6 +48,11 @@ const PageSchema = z.object({
 
 const IdSchema = z.object({
   id: z.coerce.number().int().positive(),
+})
+
+const AuthorItemsSchema = z.object({
+  page: z.coerce.number().int().nonnegative().default(0),
+  type: AuthorItemTypeSchema.default('all'),
 })
 
 const SearchSchema = z.object({
@@ -118,6 +123,17 @@ export function createApp(): Hono<{ Variables: Variables }> {
     c.header('Cache-Control', CACHE.user)
     return c.json({ user })
   })
+
+  app.get(
+    '/api/v1/users/:id/items',
+    validate('query', AuthorItemsSchema),
+    async (c) => {
+      const { page, type } = c.req.valid('query')
+      const body = await getAuthorItems({ author: c.req.param('id'), type, page })
+      c.header('Cache-Control', CACHE.user)
+      return c.json(body)
+    },
+  )
 
   app.get(
     '/api/v1/search',
