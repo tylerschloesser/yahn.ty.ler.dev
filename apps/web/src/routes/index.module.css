@@ -1,14 +1,35 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-6);
 }
 
 .title {
   font-size: var(--text-5);
 }
 
-.lede {
-  max-width: 60ch;
+.pagination {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2);
+}
+
+.pageLink {
+  color: var(--color-accent-text);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+.pageLink:hover {
+  text-decoration: underline;
+}
+
+.pageLinkDisabled {
+  color: var(--color-border);
+}
+
+.pageStatus {
   color: var(--color-text);
 }

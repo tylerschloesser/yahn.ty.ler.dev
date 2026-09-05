@@ -1,0 +1,74 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block-end: var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.titleLine {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+  align-items: baseline;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-5);
+  line-height: var(--leading-tight);
+}
+
+.link {
+  color: var(--color-text-strong);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.host {
+  font-size: var(--text-2);
+  color: var(--color-text);
+}
+
+.subtext {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-1);
+  color: var(--color-text);
+}
+
+.truncated {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+  font-size: var(--text-2);
+  color: var(--color-accent-text);
+  background: var(--color-accent-surface);
+  border-radius: var(--radius-1);
+}
+
+.body {
+  font-size: var(--text-3);
+  line-height: var(--leading-normal);
+  color: var(--color-text-strong);
+}
+
+.body :global(p) {
+  margin-block: var(--space-2);
+}
+
+.body :global(pre) {
+  padding: var(--space-2);
+  overflow-x: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-1);
+}
+
+.body :global(a) {
+  color: var(--color-accent-text);
+}

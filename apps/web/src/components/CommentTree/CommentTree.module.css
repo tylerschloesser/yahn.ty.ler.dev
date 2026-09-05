@@ -1,0 +1,58 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.list[data-nested] {
+  padding-inline-start: var(--space-4);
+  margin-block-start: var(--space-3);
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.meta {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-1);
+  color: var(--color-text);
+}
+
+.author {
+  font-weight: var(--weight-medium);
+  color: var(--color-text-strong);
+}
+
+.body {
+  font-size: var(--text-3);
+  line-height: var(--leading-normal);
+  color: var(--color-text-strong);
+}
+
+.body :global(p) {
+  margin-block: var(--space-2);
+}
+
+.body :global(pre) {
+  padding: var(--space-2);
+  overflow-x: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-1);
+}
+
+.body :global(a) {
+  color: var(--color-accent-text);
+}
+
+.tombstoneText {
+  margin: 0;
+  font-size: var(--text-3);
+  font-style: italic;
+  color: var(--color-text);
+}
