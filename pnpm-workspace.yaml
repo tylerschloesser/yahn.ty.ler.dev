@@ -1,0 +1,53 @@
+packages:
+  - apps/*
+  - infra/*
+  - packages/*
+
+catalogMode: prefer
+
+catalog:
+  # web
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  '@types/react': ^19.2.18
+  '@types/react-dom': ^19.2.4
+  vite: ^8.2.2
+  '@vitejs/plugin-react': ^6.1.1
+  '@tanstack/react-router': ^1.170.32
+  '@tanstack/router-plugin': ^1.168.35
+  '@tanstack/react-query': ^5.102.8
+  '@tanstack/react-router-devtools': ^1.167.1
+  '@base-ui/react': ^1.7.0
+  '@radix-ui/colors': ^3.0.0
+  # styling: typed CSS modules + stylelint
+  '@css-modules-kit/codegen': ^1.4.0
+  '@css-modules-kit/ts-plugin': ^1.4.0
+  '@css-modules-kit/stylelint-plugin': ^1.4.0
+  stylelint: ^17.14.1
+  stylelint-config-standard: ^40.0.0
+  stylelint-config-css-modules: ^4.6.0
+  stylelint-config-recess-order: ^7.8.0
+  '@double-great/stylelint-a11y': ^3.5.2
+  stylelint-value-no-unknown-custom-properties: ^6.1.1
+  # api
+  hono: ^4.13.7
+  '@hono/zod-validator': ^0.9.1
+  '@hono/node-server': ^2.1.1
+  '@types/aws-lambda': ^8.10.163
+  # infra (Epoch 2 — catalogued now so the versions are settled)
+  aws-cdk-lib: ^2.268.0
+  aws-cdk: ^2.1140.0
+  constructs: ^10.8.1
+  # shared
+  typescript: ~6.0.3
+  zod: ^4.5.4
+  '@types/node': ^24.13.3
+  oxlint: ^1.81.0
+  esbuild: ^0.28.2
+  tsx: ^4.20.3
+  vitest: ^4.1.11
+  '@playwright/test': ^1.63.0
+
+allowBuilds:
+  # transitive dep of the aws-cdk CLI; its postinstall links the platform binary
+  esbuild: true

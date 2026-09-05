@@ -1,0 +1,33 @@
+{
+  "name": "yahn.ty.ler.dev",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "lint": "oxlint && stylelint \"apps/web/src/**/*.css\"",
+    "lint:fix": "oxlint --fix && stylelint --fix \"apps/web/src/**/*.css\"",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "e2e": "playwright test"
+  },
+  "//": "esbuild is a root devDep, not infra/cdk's: CDK's NodejsFunction runs the bundler from the workspace root (where the lockfile lives), so that is where the binary must resolve.",
+  "devDependencies": {
+    "@css-modules-kit/stylelint-plugin": "catalog:",
+    "@double-great/stylelint-a11y": "catalog:",
+    "@playwright/test": "catalog:",
+    "esbuild": "catalog:",
+    "oxlint": "catalog:",
+    "stylelint": "catalog:",
+    "stylelint-config-css-modules": "catalog:",
+    "stylelint-config-recess-order": "catalog:",
+    "stylelint-config-standard": "catalog:",
+    "stylelint-value-no-unknown-custom-properties": "catalog:",
+    "typescript": "catalog:"
+  }
+}
