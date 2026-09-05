@@ -93,6 +93,23 @@ work when auth arrives. The origin sets short `Cache-Control` with `stale-while-
 CloudFront honors it, which is how a cached front page becomes one edge hit instead of 31 HN
 requests.
 
+## Deployment
+
+Live at **https://yahn.ty.ler.dev**. One CloudFront distribution serves the static app from S3
+and `/api/*` from a Lambda function URL, so the API is same-origin: no CORS, no preflight, and
+cookies will work when auth lands.
+
+`/api/*` is cached at the edge, which is where the Lambda earns its keep — a repeat front page
+is one CloudFront hit instead of 31 requests to Hacker News, measured at 1.23s cold against
+0.03s warm. The origin decides: feeds send `max-age=30, stale-while-revalidate=300`, items
+`max-age=60`, and every non-2xx sends `no-store` so an upstream blip is never pinned at an edge.
+
+Every pull request from this repo gets a **full preview clone** — its own bucket, Lambda,
+distribution and hostname at `https://pr-<N>.yahn.ty.ler.dev` — deployed on push, tested with
+the same Playwright spec, commented on the PR, and destroyed when the PR closes. They share one
+wildcard certificate, because issuing a certificate is the slow part. `.claude/rules/cdk.md` has
+the details and the things that must not be loosened.
+
 ## Conventions
 
 Adopted wholesale from [thai.ler.dev](https://thai.ler.dev): oxlint + stylelint and no
