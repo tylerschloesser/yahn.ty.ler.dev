@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "build": "pnpm -r run build",
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "pnpm -r run typecheck && tsc -b tsconfig.e2e.json",
     "test": "pnpm -r run test",
     "lint": "oxlint && stylelint \"apps/web/src/**/*.css\"",
     "lint:fix": "oxlint --fix && stylelint --fix \"apps/web/src/**/*.css\"",
@@ -21,6 +21,7 @@
     "@css-modules-kit/stylelint-plugin": "catalog:",
     "@double-great/stylelint-a11y": "catalog:",
     "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
     "esbuild": "catalog:",
     "oxlint": "catalog:",
     "stylelint": "catalog:",

@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node", "aws-lambda"],
+    // Bundled by esbuild via CDK's NodejsFunction, never emitted by tsc.
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  // No project reference to @yahn/schema or @yahn/hn: both are consumed as
+  // source through their exports maps, so they are typechecked as part of this
+  // program. A reference would require them to be `composite` and emit
+  // declarations, which nothing here needs.
+  "include": ["src"]
+}

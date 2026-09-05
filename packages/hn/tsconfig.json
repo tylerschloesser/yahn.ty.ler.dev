@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Consumed as source, bundled by esbuild via CDK's NodejsFunction and run
+    // directly by vitest; never emitted by tsc.
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  // No project reference to @yahn/schema: it is consumed as source through its
+  // exports map, so it is typechecked as part of this program. A reference
+  // would require it to be `composite` and emit declarations, which nothing
+  // here needs.
+  "include": ["src"]
+}
