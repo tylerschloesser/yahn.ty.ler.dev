@@ -31,6 +31,12 @@ catalog:
   stylelint-value-no-unknown-custom-properties: ^6.1.1
   # api
   hono: ^4.13.7
+  # enrichment (Epoch 4). Pinned to the same versions thai.ler.dev runs, which
+  # is where the Anthropic integration this one copies was proven.
+  '@anthropic-ai/sdk': ^0.124.0
+  '@aws-sdk/client-dynamodb': ^3.1127.0
+  '@aws-sdk/lib-dynamodb': ^3.1127.0
+  '@aws-sdk/client-secrets-manager': ^3.1127.0
   '@hono/zod-validator': ^0.9.1
   '@hono/node-server': ^2.1.1
   '@types/aws-lambda': ^8.10.163
@@ -53,6 +59,10 @@ allowBuilds:
   esbuild: true
 
 minimumReleaseAgeExclude:
+  - '@anthropic-ai/sdk@0.124.0'
+  - '@aws-sdk/client-dynamodb@3.1127.0'
+  - '@aws-sdk/client-secrets-manager@3.1127.0'
+  - '@aws-sdk/lib-dynamodb@3.1127.0'
   - '@playwright/test@1.63.0'
   - hono@4.13.7
   - playwright-core@1.63.0

@@ -4,6 +4,7 @@ paths:
   - "**/*.test.ts"
   - "playwright.config.ts"
   - "packages/hn/vitest.config.ts"
+  - "apps/api/vitest.config.ts"
 ---
 
 # Tests
@@ -12,12 +13,15 @@ Loaded when you touch a vitest test, the Playwright config, or anything under `e
 
 There are two test layers and they answer different questions.
 
-## vitest, `packages/hn` only
+## vitest, `packages/hn` and `apps/api/src/enrich`
 
 The tree merge, sibling ordering, the node cap, `200 + null` handling and tombstoned children
-are the only real logic in this repo, and they are pure. That is why `packages/hn` has a test
-framework and nothing else does — not as a coverage target, but because it gives a subagent a
-fast, cheap, offline feedback loop on the one thing that can be subtly wrong.
+are the only real logic in `packages/hn`, and they are pure. That is why it has a test framework
+and most of this repo does not — not as a coverage target, but because it gives a subagent a
+fast, cheap, offline feedback loop on the one thing that can be subtly wrong. `apps/api/src/enrich`
+earns the same treatment for the same reason: thread rendering (selection strategy, tombstone
+splicing, HTML-to-text, the BFS-then-tree-order budget walk) is pure and exactly the kind of
+subtly-wrong logic this rule exists to protect, even though it lives inside `apps/api`.
 
 - **Tests never touch the network.** Fetching is injected, so a test supplies a map-backed
   `getItem` instead of stubbing `globalThis.fetch`. A test that would fail on a plane is a bug.

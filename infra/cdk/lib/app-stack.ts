@@ -9,10 +9,12 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as targets from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment'
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
 import type { Construct } from 'constructs'
 import { HOSTED_ZONE_ID, ZONE_NAME } from './config.js'
 
@@ -21,6 +23,14 @@ interface AppStackProps extends StackProps {
   domainName: string
   /** The shared wildcard cert from YahnSharedStack, hard-coded in bin/app.ts. */
   certificateArn: string
+  /**
+   * True for `YahnAppStack-prod` only. It decides one thing: whether the
+   * enrichment table survives a stack delete. A preview's table must not —
+   * `cleanup.yml` deletes preview stacks on a cron and a retained table would
+   * accumulate silently — while production's holds summaries that cost real
+   * money to regenerate.
+   */
+  retainData: boolean
 }
 
 export class AppStack extends Stack {
@@ -86,6 +96,92 @@ export class AppStack extends Stack {
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
     })
 
+    /**
+     * Where a generated enrichment lives so it is generated once.
+     *
+     * `pk=ITEM#<id>` / `sk=ENRICH#<kind>#<generatedAt>#<inputKey>`. The plan
+     * reserved `sk=ENRICH#<kind>#<contentKey>`; both that and a bare input
+     * hash turned out wrong in opposite directions, and the reasoning lives
+     * with the code that depends on it — `apps/api/src/enrich/store.ts` and
+     * `.claude/rules/api.md`.
+     *
+     * On-demand billing because the traffic is one write per new thread
+     * version and a handful of reads; provisioned capacity here would be a
+     * standing charge against a table that is idle most of the day.
+     */
+    const enrichTable = new dynamodb.TableV2(this, 'EnrichTable', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billing: dynamodb.Billing.onDemand(),
+      // A summary of a thread nobody has opened in a month is not worth
+      // storing; regenerating it costs less than keeping every one forever.
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: props.retainData ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+    })
+
+    /**
+     * Imported by name, never created here and never a plaintext env var — an
+     * env var would put the key in the CloudFormation template, which is
+     * readable by anyone who can describe the stack. The function fetches it
+     * once per cold start.
+     *
+     * `fromSecretNameV2` rather than a complete ARN so that rotating or
+     * recreating the secret (which changes its six-character suffix) does not
+     * require a redeploy; it grants against the wildcard ARN.
+     *
+     * The secret is created by hand, once, and is deliberately **not**
+     * thai.ler.dev's: a shared key would couple two unrelated projects' quota,
+     * blast radius and rotation.
+     */
+    const anthropicSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      'AnthropicSecret',
+      'yahn-ty-ler-dev/anthropic',
+    )
+
+    // The enrichment function. A second function rather than a second route on
+    // the first, because `invokeMode` is a property of the function URL and is
+    // **fixed at creation** — a buffered URL cannot be promoted to a streaming
+    // one, it has to be replaced.
+    //
+    // Memory is deliberately NOT inherited from the read function: cost is
+    // memory x duration, and this one spends most of its wall clock blocked on
+    // a model call, so paying for more vCPU across a 60s stream buys nothing on
+    // the part that dominates. See `.claude/rules/cdk.md`.
+    const enrichFn = new nodejs.NodejsFunction(this, 'EnrichFunction', {
+      entry: join(currentDir, '../../../apps/api/src/lambda-enrich.ts'),
+      runtime: lambda.Runtime.NODEJS_24_X,
+      architecture: lambda.Architecture.ARM_64,
+      handler: 'handler',
+      memorySize: 512,
+      // A model call is not a 30s workload. CloudFront gives up on the origin
+      // long before this fires (see `readTimeout` below), so this is the outer
+      // bound on a stream that is still making progress, not the SLA.
+      timeout: Duration.minutes(5),
+      bundling: {
+        target: 'node24',
+        externalModules: ['@aws-sdk/*'],
+        sourceMap: true,
+      },
+      environment: {
+        NODE_OPTIONS: '--enable-source-maps',
+        ENRICH_TABLE_NAME: enrichTable.tableName,
+        ANTHROPIC_SECRET_ID: anthropicSecret.secretName,
+        // The only place the real provider is selected. Everywhere else —
+        // `pnpm dev`, `pnpm verify`, `pnpm e2e` — it is unset and defaults to
+        // `fake`, which is what keeps those three credential-free.
+        MODEL_PROVIDER: 'anthropic',
+      },
+    })
+
+    enrichTable.grantReadWriteData(enrichFn)
+    anthropicSecret.grantRead(enrichFn)
+
+    const enrichFnUrl = enrichFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    })
+
     // Imported, not created: this is the shared wildcard cert from
     // YahnSharedStack, so preview stacks never wait on issuance.
     const certificate = acm.Certificate.fromCertificateArn(
@@ -133,6 +229,38 @@ function handler(event) {
 
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       additionalBehaviors: {
+        // Ordered before `/api/*`: CloudFront matches the most specific path
+        // pattern, but keeping the pair adjacent and specific-first is what
+        // makes the split legible.
+        //
+        // `CACHING_DISABLED`, because a stream has nothing to cache and a
+        // cached SSE body would be served to the next viewer as a replay.
+        // `ALLOW_ALL` so the method is not the thing that decides the request
+        // shape — whether a body survives origin access control's SigV4
+        // signing is measured, not assumed.
+        //
+        // `compress: false` says what is meant — these responses are not
+        // compressible — and not that it was shown to be faster. Measured
+        // against a twin behavior on this same origin: CloudFront never
+        // compresses `text/event-stream` at all (no `content-encoding` on any
+        // response), it does not buffer either way, and 30 interleaved pairs
+        // put the difference at +0.003s median. The plan's hypothesis that
+        // gzip would buffer the stream is simply not what happens.
+        '/api/v1/enrich/*': {
+          origin: origins.FunctionUrlOrigin.withOriginAccessControl(enrichFnUrl, {
+            // The time CloudFront waits for the first origin byte *and* between
+            // subsequent packets. 60s is the ceiling without a quota increase,
+            // so a stream that goes quiet for longer than this is cut off at
+            // the edge no matter what the Lambda timeout says — which is why
+            // the producer has to emit keepalives while the model thinks.
+            readTimeout: Duration.seconds(60),
+          }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          compress: false,
+        },
         '/api/*': {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(fnUrl),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -179,6 +307,15 @@ function handler(event) {
     // auth layer — before the function is ever invoked, so nothing appears in
     // its logs. See aws/aws-cdk#35872.
     fn.addPermission('AllowCloudFrontInvokeFunction', {
+      principal: new iam.ServicePrincipal('cloudfront.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+    })
+
+    // Same grant, same reason, for the streaming function. Omitting it fails
+    // exactly the same way: 403 from the function URL's auth layer, and
+    // nothing whatsoever in the function's logs.
+    enrichFn.addPermission('AllowCloudFrontInvokeFunction', {
       principal: new iam.ServicePrincipal('cloudfront.amazonaws.com'),
       action: 'lambda:InvokeFunction',
       sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
@@ -256,5 +393,7 @@ function handler(event) {
       value: distribution.distributionDomainName,
     })
     new CfnOutput(this, 'BucketName', { value: bucket.bucketName })
+    new CfnOutput(this, 'EnrichFunctionName', { value: enrichFn.functionName })
+    new CfnOutput(this, 'EnrichTableName', { value: enrichTable.tableName })
   }
 }

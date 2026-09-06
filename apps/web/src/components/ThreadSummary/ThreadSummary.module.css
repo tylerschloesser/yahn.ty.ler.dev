@@ -1,0 +1,63 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-2);
+}
+
+.button {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-3);
+  font-weight: var(--weight-medium);
+  color: var(--color-accent-solid-text);
+  cursor: pointer;
+  background: var(--color-accent-solid);
+  border: none;
+  border-radius: var(--radius-1);
+}
+
+.button:hover {
+  filter: brightness(0.95);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-focus-ring-on-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * The summary is markdown but is rendered as plain text (see the comment in
+ * ThreadSummary.tsx for why) — `pre-wrap` is what keeps the prompt's blank
+ * lines and `- ` bullets readable without a parser.
+ */
+.text {
+  max-width: 70ch;
+  font-size: var(--text-3);
+  line-height: var(--leading-normal);
+  color: var(--color-text-strong);
+  white-space: pre-wrap;
+}
+
+.placeholder {
+  font-style: italic;
+  color: var(--color-text);
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--text-1);
+  color: var(--color-text);
+}
+
+.error {
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+  font-size: var(--text-3);
+  color: var(--color-danger-text);
+  background: var(--color-danger-surface);
+  border-radius: var(--radius-1);
+}
