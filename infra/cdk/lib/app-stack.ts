@@ -242,10 +242,13 @@ function handler(event) {
         // shape — whether a body survives origin access control's SigV4
         // signing is measured, not assumed.
         //
-        // `compress: false` is a hypothesis under test, not a settled fact:
-        // gzip wants a complete body and buffering is precisely what streaming
-        // must avoid. `/api/v1/spike-compressed/*` below is the same origin
-        // with `compress: true`, so one deploy answers it.
+        // `compress: false` says what is meant — these responses are not
+        // compressible — and not that it was shown to be faster. Measured
+        // against a twin behavior on this same origin: CloudFront never
+        // compresses `text/event-stream` at all (no `content-encoding` on any
+        // response), it does not buffer either way, and 30 interleaved pairs
+        // put the difference at +0.003s median. The plan's hypothesis that
+        // gzip would buffer the stream is simply not what happens.
         '/api/v1/enrich/*': {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(enrichFnUrl, {
             // The time CloudFront waits for the first origin byte *and* between
@@ -260,20 +263,6 @@ function handler(event) {
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           compress: false,
-        },
-        // TEMPORARY, for the Epoch 4 streaming spike only: identical to the
-        // behavior above except `compress: true`, so both can be measured
-        // against the same deployed origin in one preview rather than two.
-        // Delete once the compression question is recorded in cdk.md.
-        '/api/v1/spike-compressed/*': {
-          origin: origins.FunctionUrlOrigin.withOriginAccessControl(enrichFnUrl, {
-            readTimeout: Duration.seconds(60),
-          }),
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          compress: true,
         },
         '/api/*': {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(fnUrl),

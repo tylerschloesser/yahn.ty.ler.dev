@@ -1,22 +1,44 @@
+import { getItem, NotFoundError, UpstreamError } from '@yahn/hn'
+import {
+  ENRICH_EVENT,
+  type EnrichmentKind,
+  type Enrichments,
+  type ThreadSummary,
+} from '@yahn/schema'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
+import type { SSEStreamingApi } from 'hono/streaming'
+import { getModel } from './model/index.ts'
+import { getStore } from './store.ts'
+import { inputKey, renderThread, type SelectionStrategy } from './thread.ts'
 
 /**
- * The enrichment API — a **second** Hono app behind a **second** Lambda, on a
- * **second** CloudFront behavior. It is separate from `createApp()` for two
- * reasons that are both properties of infrastructure rather than of taste:
+ * The enrichment API — a **second** Hono app behind a **second** Lambda on a
+ * **second** CloudFront behavior. The split is forced, not stylistic:
  *
  * - Response streaming is an invoke-mode property of a Lambda function URL and
  *   is fixed at creation, so a streaming route cannot live behind the read
  *   API's buffered URL.
  * - Read responses are cached hard at the edge and these must not be cached at
- *   all, and caching is a property of a CloudFront behavior.
+ *   all, and caching is a property of a behavior.
  *
- * `apps/api/src/lambda-enrich.ts` wraps it with `streamHandle`; `server.ts`
- * serves it on its own local port. Mounting it into the read app with
- * `app.route()` would silently drop that app's `onError` mapping, which is a
- * contract — see `.claude/rules/api.md`.
+ * `src/lambda-enrich.ts` wraps it with `streamHandle`; `src/server.ts` serves
+ * it on its own local port. Mounting it into the read app with `app.route()`
+ * would silently drop that app's `onError` mapping, which is a contract — see
+ * `.claude/rules/api.md`.
  */
+
+const KIND: EnrichmentKind = 'thread-summary'
+
+/**
+ * Which slice of the thread goes to the model. Overridable per request purely
+ * so the whole-tree-versus-a-selection question stays measurable against a
+ * deployed edge without a redeploy; the default is what production serves.
+ */
+const DEFAULT_STRATEGY: SelectionStrategy = 'budget'
+
+const STRATEGIES = new Set<string>(['full', 'top-level', 'budget'])
+
 export function createEnrichApp(): Hono {
   const app = new Hono()
 
@@ -26,46 +48,127 @@ export function createEnrichApp(): Hono {
   })
 
   /**
-   * **Spike, not the feature.** Hardcoded events on a timer, answering the one
-   * question every other decision in this epoch depends on: does
-   * `streamHandle` → `RESPONSE_STREAM` function URL → CloudFront actually
-   * deliver bytes incrementally, or does something in that chain buffer the
-   * whole body? There is no streaming prior art in this repo or in
-   * thai.ler.dev, so it is proven before anything is built on it.
-   *
-   * Registered on GET *and* POST on purpose. Under origin access control
-   * CloudFront signs each origin request with SigV4, and a request with a body
-   * additionally needs the viewer to supply `x-amz-content-sha256` — so
-   * whether this endpoint can take a body at all is a thing to measure through
-   * a deployed edge, not to assume.
-   *
-   * The second path is the same handler behind the temporary `compress: true`
-   * behavior. CloudFront does not rewrite the URI on the way to the origin, so
-   * the origin has to answer both paths for one deploy to measure both.
-   *
-   * `t` is the server clock at write time; `curl -N` with per-line timestamps
-   * compares it against arrival.
+   * `GET`, not `POST`, and that is measured rather than stylistic: under
+   * origin access control CloudFront signs the origin request with SigV4,
+   * whose signature covers a payload hash CloudFront cannot compute — so a
+   * POST *with a body* 403s unless the viewer sends `x-amz-content-sha256`
+   * itself. Everything this needs is an item id, which fits in the path. The
+   * result table is in `.claude/rules/cdk.md`.
    */
-  app.on(['GET', 'POST'], ['/api/v1/enrich/spike', '/api/v1/spike-compressed/spike'], (c) =>
-    streamSSE(c, async (stream) => {
-      const started = Date.now()
-      await stream.writeSSE({ event: 'start', data: JSON.stringify({ t: started }) })
+  app.get('/api/v1/enrich/thread/:id', (c) => {
+    const id = Number(c.req.param('id'))
+    const strategyParam = c.req.query('strategy')
+    const strategy =
+      strategyParam && STRATEGIES.has(strategyParam)
+        ? (strategyParam as SelectionStrategy)
+        : DEFAULT_STRATEGY
 
-      for (let i = 0; i < 8; i++) {
-        await stream.sleep(500)
-        await stream.writeSSE({
-          event: 'tick',
-          id: String(i),
-          data: JSON.stringify({ i, t: Date.now(), elapsed: Date.now() - started }),
-        })
-      }
+    c.header('Cache-Control', 'no-store')
 
-      await stream.writeSSE({
-        event: 'done',
-        data: JSON.stringify({ elapsed: Date.now() - started }),
-      })
-    }),
-  )
+    if (!Number.isInteger(id) || id <= 0) {
+      return c.json({ error: 'id must be a positive integer' }, 400)
+    }
+
+    return streamSSE(c, (stream) => run(stream, id, strategy))
+  })
 
   return app
+}
+
+/**
+ * The read-through, in stream order.
+ *
+ * Errors are reported **in band**. Once `streamSSE` has written a status line
+ * it cannot be changed, so a failure after the first byte can only be an
+ * `error` event — which is why the contract says a client must treat "stream
+ * ended with no terminal event" as a failure rather than as a short summary.
+ */
+async function run(stream: SSEStreamingApi, id: number, strategy: SelectionStrategy) {
+  try {
+    const item = await getItem(id)
+    const rendered = renderThread(item.story, item.comments, { strategy })
+    const key = inputKey(rendered.text)
+    const store = getStore()
+
+    const cached = await store.get(id, KIND, key)
+
+    const input = {
+      strategy: rendered.strategy,
+      comments: rendered.comments,
+      totalComments: rendered.totalComments,
+      chars: rendered.chars,
+      inputTokens: cached?.input.inputTokens ?? null,
+      outputTokens: cached?.input.outputTokens ?? null,
+    }
+
+    /**
+     * Sent before any model work begins, and not merely for tidiness: it tells
+     * the client whether to render a stored summary or watch one being
+     * written, and it puts a byte on the wire immediately. CloudFront gives an
+     * origin 60 seconds to produce the first byte, and a cold Lambda plus a
+     * comment-tree fetch plus a model's first token is not reliably inside it.
+     */
+    await stream.writeSSE({
+      event: ENRICH_EVENT.meta,
+      data: JSON.stringify({ itemId: id, cached: cached !== null, inputKey: key, input }),
+    })
+
+    if (cached) {
+      await complete(stream, cached)
+      return
+    }
+
+    const result = await getModel().summarize(rendered.text, (text) =>
+      stream.writeSSE({ event: ENRICH_EVENT.delta, data: JSON.stringify({ text }) }).then(() => {}),
+    )
+
+    const summary: ThreadSummary = {
+      text: result.text,
+      model: result.model,
+      generatedAt: Math.floor(Date.now() / 1000),
+      inputKey: key,
+      input: {
+        ...input,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      },
+    }
+
+    // Written before the terminal event, so a client that saw `complete` knows
+    // the next reader gets a hit. A write failure is still reported in band
+    // rather than swallowed: the summary was generated and paid for, and
+    // silently failing to store it would mean paying for it again every time.
+    await store.put(id, KIND, summary)
+    await complete(stream, summary)
+  } catch (error) {
+    await stream.writeSSE({
+      event: ENRICH_EVENT.error,
+      data: JSON.stringify({ error: message(error) }),
+    })
+  }
+}
+
+function complete(stream: SSEStreamingApi, threadSummary: ThreadSummary): Promise<void> {
+  // The payload is the `enrichments` slot itself — the shape `Story.enrichments`
+  // already declares — so the client merges it into the story it holds rather
+  // than learning a second shape for the same thing.
+  const enrichments: Enrichments = { threadSummary }
+  return stream
+    .writeSSE({ event: ENRICH_EVENT.complete, data: JSON.stringify({ enrichments }) })
+    .then(() => {})
+}
+
+/**
+ * The same distinction the read API draws, carried into a stream that can no
+ * longer express it as a status code: a missing item is the caller's problem
+ * and an upstream failure is not ours.
+ */
+function message(error: unknown): string {
+  if (error instanceof NotFoundError) return error.message
+  if (error instanceof UpstreamError) {
+    console.error('upstream failure', error.message, error.cause)
+    return 'upstream request failed'
+  }
+  console.error('enrichment failed', error)
+  return 'enrichment failed'
 }

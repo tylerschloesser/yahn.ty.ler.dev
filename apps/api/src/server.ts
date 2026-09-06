@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import { createApp } from './app.ts'
 import { createEnrichApp } from './enrich/app.ts'
-import { env } from './env.ts'
+import { applyLocalDefaults, env } from './env.ts'
 
 /**
  * The local composition root. `src/lambda.ts` and `src/lambda-enrich.ts` wrap
@@ -21,6 +21,8 @@ import { env } from './env.ts'
  * main deviation from thai.ler.dev, which has no local backend and proxies
  * `/api` to production.
  */
+applyLocalDefaults()
+
 serve({ fetch: createApp().fetch, port: env.port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`)
 })

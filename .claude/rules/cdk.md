@@ -55,7 +55,7 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
   their `exports` maps. esbuild must bundle them: never add them to `externalModules`, and no
   `depsLockFilePath` — `NodejsFunction` finds the root lockfile on its own.
 
-## Four CloudFront gotchas, each of which cost thai.ler.dev a debugging session
+## Five CloudFront gotchas, each of which cost thai.ler.dev a debugging session
 
 1. **`lambda:InvokeFunction` must be granted alongside `lambda:InvokeFunctionUrl`.** Lambda began
    requiring both on function URLs around Oct 2025; CDK's `withOriginAccessControl` still grants
@@ -76,9 +76,73 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
 4. **The API lives inside the app stack, not its own.** `FunctionUrlOrigin.withOriginAccessControl`
    adds a resource policy scoped to the distribution's ARN, so splitting them is a cycle.
 
-thai's fifth gotcha — POST bodies needing `x-amz-content-sha256` under OAC SigV4 — does not apply
-while this API is GET-only (`ALLOW_GET_HEAD_OPTIONS`). It will the moment `/api/v1/enrich/**`
-exists.
+### 5. A POST **with a body** through OAC needs `x-amz-content-sha256` from the viewer
+
+thai's fifth gotcha, predicted here for Epoch 4 and **reproduced against `pr-7` on 2026-09-05**:
+
+| Request through the enrichment behavior | Result |
+| --- | --- |
+| `GET` | 200, streams |
+| `POST` with an empty body, no extra header | 200, streams |
+| `POST` with a body, no `x-amz-content-sha256` | **403 `SignatureDoesNotMatch`** |
+| `POST` with a body **and** `x-amz-content-sha256: <sha256 of body>` | 200, streams |
+
+Origin access control signs the origin request with SigV4, and SigV4 covers a hash of the
+payload that CloudFront cannot compute for you — so the *viewer* has to supply it. That is a
+real burden on every client (`SubtleCrypto` in a browser) and it rules out `EventSource`, which
+only issues GETs.
+
+**So the enrichment endpoint is a `GET`.** Everything it needs is an item id, which fits in the
+path, so the body bought nothing and would have cost every caller a payload hash. `.claude/rules/api.md`
+reserved the prefix as `POST /api/v1/enrich/**`; that reservation was about the *prefix*, and
+the method was decided by this measurement. `ALLOW_ALL` stays on the behavior so the answer stays
+re-testable without a redeploy.
+
+## `compress` on a streaming behavior: measured, and it is a no-op
+
+The plan flagged `compress: true` as "probably wrong — gzip wants a whole body and buffering is
+what streaming must avoid", explicitly as a hypothesis. **It is not what happens.** Measured on
+`pr-7` with two behaviors over the same origin, one `compress: true` and one `compress: false`
+(the second behavior was temporary and has been deleted — recreate it to re-check):
+
+- Compression **never happened at all**. Every response came back with no `content-encoding`,
+  with `Accept-Encoding: gzip, deflate, br` on the viewer request. CloudFront does not compress
+  `text/event-stream`.
+- It did **not** buffer. Events arrived 500ms apart under both settings.
+- It costs nothing measurable. 30 interleaved pairs, alternating which variant went first:
+  median TTFB 0.212s (compress off) vs 0.214s (on), paired difference **+0.003s median**,
+  −0.073s to +0.687s, with `on` slower in 17 of 30 pairs — a coin flip.
+
+**The first version of this measurement said otherwise, and it was wrong.** Twelve pairs with
+`off` always sampled first produced medians of 0.232s vs 0.555s, which reads as a 2.4x
+regression. Alternating the order erased it: the gap was the position in the pair, not the
+setting. This is Epoch 3's lesson arriving a second time — *interleave, and randomize order, or
+you are measuring your harness.*
+
+`compress: false` stays on the behavior anyway, because it says what is meant — these responses
+are not compressible — not because it was shown to be faster.
+
+## Streaming through CloudFront: it works, and here is the shape that works
+
+Proven end to end on `pr-7` before any of Epoch 4 was built on it: `hono/aws-lambda`'s
+**`streamHandle`** → a function URL with `invokeMode: RESPONSE_STREAM` → a `CACHING_DISABLED`
+behavior. First byte at 0.21s, events arriving incrementally at their origin cadence, both
+locally and through the edge. No hand-rolled `awslambda.streamifyResponse`.
+
+Three things about that chain are load-bearing:
+
+- **`RESPONSE_STREAM` is fixed when the function URL is created.** A buffered URL cannot be
+  promoted; it has to be replaced. This is the whole reason enrichment is a second Lambda rather
+  than a route on the read one.
+- **`readTimeout` on the origin is the real deadline, not the Lambda timeout.** It is what
+  CloudFront waits for the first byte *and* between subsequent packets, and 60s is the ceiling
+  without a quota increase. A producer that goes quiet longer than that is cut off at the edge
+  while the Lambda happily keeps running. Anything that waits on a model must emit something —
+  the enrichment stream sends a `meta` event before any model work starts for exactly this.
+- **The enrichment function does not inherit the read function's 512MB reasoning.** Cost is
+  memory x duration, and this one spends most of its wall clock blocked on a model call, so
+  buying vCPU for the blocked part is pure waste. It is 512MB on its own terms, not by
+  inheritance, and its 5-minute timeout is an outer bound on a stream still making progress.
 
 ## Caching — the deliberate divergence from thai
 

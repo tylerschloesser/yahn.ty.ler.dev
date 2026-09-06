@@ -45,8 +45,9 @@ wrong field there is worse than a missing one, because every later agent will tr
 - `erasableSyntaxOnly` and `verbatimModuleSyntax` are on: no `enum`, no constructor parameter
   properties (assign fields in the body), `import type` for types.
 - No formatter. Match the surrounding style: no semicolons, single quotes.
-- **vitest covers `packages/hn` and nothing else**, on purpose: the tree merge and ordering are
-  the only real logic here, and they are pure. Tests never touch the network.
+- **vitest covers `packages/hn` and `apps/api/src/enrich`**, on purpose and nothing else: the
+  tree merge, the ordering, and the rendering of a thread into model input are the only real
+  logic here, and they are pure. Tests never touch the network.
 
 ## How to work
 
