@@ -39,6 +39,14 @@ const DEFAULT_STRATEGY: SelectionStrategy = 'budget'
 
 const STRATEGIES = new Set<string>(['full', 'top-level', 'budget'])
 
+/**
+ * How much of a large thread `budget` sends. Measured, not chosen by feel —
+ * see `.claude/rules/api.md`. `?strategy=` and `?budget=` exist so the
+ * measurement behind that number can be re-run against a deployed edge without
+ * a redeploy, which is the standard `CLAUDE.md` sets for a claim like this.
+ */
+const DEFAULT_BUDGET_CHARS = 200_000
+
 export function createEnrichApp(): Hono {
   const app = new Hono()
 
@@ -58,6 +66,7 @@ export function createEnrichApp(): Hono {
   app.get('/api/v1/enrich/thread/:id', (c) => {
     const id = Number(c.req.param('id'))
     const strategyParam = c.req.query('strategy')
+    const budgetParam = Number(c.req.query('budget'))
     const strategy =
       strategyParam && STRATEGIES.has(strategyParam)
         ? (strategyParam as SelectionStrategy)
@@ -69,7 +78,10 @@ export function createEnrichApp(): Hono {
       return c.json({ error: 'id must be a positive integer' }, 400)
     }
 
-    return streamSSE(c, (stream) => run(stream, id, strategy))
+    const budgetChars =
+      Number.isInteger(budgetParam) && budgetParam > 0 ? budgetParam : DEFAULT_BUDGET_CHARS
+
+    return streamSSE(c, (stream) => run(stream, id, strategy, budgetChars))
   })
 
   return app
@@ -125,13 +137,18 @@ const HEARTBEAT_MS = 15_000
  * `error` event — which is why the contract says a client must treat "stream
  * ended with no terminal event" as a failure rather than as a short summary.
  */
-async function run(stream: SSEStreamingApi, id: number, strategy: SelectionStrategy) {
+async function run(
+  stream: SSEStreamingApi,
+  id: number,
+  strategy: SelectionStrategy,
+  budgetChars: number,
+) {
   const out = writer(stream)
   const heartbeat = setInterval(() => void out.ping(), HEARTBEAT_MS)
 
   try {
     const item = await getItem(id)
-    const rendered = renderThread(item.story, item.comments, { strategy })
+    const rendered = renderThread(item.story, item.comments, { strategy, budgetChars })
     const key = inputKey(rendered.text)
     const store = getStore()
 
