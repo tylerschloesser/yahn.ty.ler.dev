@@ -76,6 +76,48 @@ export function createEnrichApp(): Hono {
 }
 
 /**
+ * Serializes every write to one stream.
+ *
+ * Necessary because the heartbeat below fires on a timer while a delta write
+ * may already be in flight, and two concurrent writers on the same
+ * `TransformStream` can interleave a keepalive into the middle of an SSE
+ * frame — which a client parses as a corrupt event rather than as two.
+ */
+interface Writer {
+  send(event: string, data: unknown): Promise<void>
+  /** An SSE comment line, which every client ignores. */
+  ping(): Promise<void>
+}
+
+function writer(stream: SSEStreamingApi): Writer {
+  let tail: Promise<unknown> = Promise.resolve()
+
+  const queue = (task: () => Promise<unknown>): Promise<void> => {
+    const next = tail.then(task, task)
+    tail = next.catch(() => undefined)
+    return next.then(() => undefined)
+  }
+
+  return {
+    send: (event, data) => queue(() => stream.writeSSE({ event, data: JSON.stringify(data) })),
+    ping: () => queue(() => stream.write(': keepalive\n\n')),
+  }
+}
+
+/**
+ * SSE comment lines, which every client ignores.
+ *
+ * They exist for CloudFront, not for the client: the origin `readTimeout` is
+ * 60s and applies to the gap *between* packets as well as to the first byte,
+ * so a producer that goes quiet for longer is cut off at the edge while the
+ * Lambda keeps running. Two stretches of this handler can be silent for a
+ * long time — fetching a large comment tree (measured at up to 27s on the
+ * biggest thread on HN) and a model thinking before its first token — and the
+ * first of those happens *before* there is anything to put in `meta`.
+ */
+const HEARTBEAT_MS = 15_000
+
+/**
  * The read-through, in stream order.
  *
  * Errors are reported **in band**. Once `streamSSE` has written a status line
@@ -84,6 +126,9 @@ export function createEnrichApp(): Hono {
  * ended with no terminal event" as a failure rather than as a short summary.
  */
 async function run(stream: SSEStreamingApi, id: number, strategy: SelectionStrategy) {
+  const out = writer(stream)
+  const heartbeat = setInterval(() => void out.ping(), HEARTBEAT_MS)
+
   try {
     const item = await getItem(id)
     const rendered = renderThread(item.story, item.comments, { strategy })
@@ -108,18 +153,20 @@ async function run(stream: SSEStreamingApi, id: number, strategy: SelectionStrat
      * origin 60 seconds to produce the first byte, and a cold Lambda plus a
      * comment-tree fetch plus a model's first token is not reliably inside it.
      */
-    await stream.writeSSE({
-      event: ENRICH_EVENT.meta,
-      data: JSON.stringify({ itemId: id, cached: cached !== null, inputKey: key, input }),
+    await out.send(ENRICH_EVENT.meta, {
+      itemId: id,
+      cached: cached !== null,
+      inputKey: key,
+      input,
     })
 
     if (cached) {
-      await complete(stream, cached)
+      await complete(out, cached)
       return
     }
 
     const result = await getModel().summarize(rendered.text, (text) =>
-      stream.writeSSE({ event: ENRICH_EVENT.delta, data: JSON.stringify({ text }) }).then(() => {}),
+      out.send(ENRICH_EVENT.delta, { text }),
     )
 
     const summary: ThreadSummary = {
@@ -139,23 +186,20 @@ async function run(stream: SSEStreamingApi, id: number, strategy: SelectionStrat
     // rather than swallowed: the summary was generated and paid for, and
     // silently failing to store it would mean paying for it again every time.
     await store.put(id, KIND, summary)
-    await complete(stream, summary)
+    await complete(out, summary)
   } catch (error) {
-    await stream.writeSSE({
-      event: ENRICH_EVENT.error,
-      data: JSON.stringify({ error: message(error) }),
-    })
+    await out.send(ENRICH_EVENT.error, { error: message(error) })
+  } finally {
+    clearInterval(heartbeat)
   }
 }
 
-function complete(stream: SSEStreamingApi, threadSummary: ThreadSummary): Promise<void> {
+function complete(out: Writer, threadSummary: ThreadSummary): Promise<void> {
   // The payload is the `enrichments` slot itself — the shape `Story.enrichments`
   // already declares — so the client merges it into the story it holds rather
   // than learning a second shape for the same thing.
   const enrichments: Enrichments = { threadSummary }
-  return stream
-    .writeSSE({ event: ENRICH_EVENT.complete, data: JSON.stringify({ enrichments }) })
-    .then(() => {})
+  return out.send(ENRICH_EVENT.complete, { enrichments })
 }
 
 /**
