@@ -99,14 +99,11 @@ export class AppStack extends Stack {
     /**
      * Where a generated enrichment lives so it is generated once.
      *
-     * `pk=ITEM#<id>` / `sk=ENRICH#<kind>#<inputKey>`, the shape reserved for it
-     * in `.claude/rules/api.md` — with one correction. That rule says
-     * `sk=ENRICH#<kind>#<contentKey>`, and `contentKey` is
-     * `sha256(url ?? text)`, which for a story is fixed the moment it is
-     * posted and does not change as comments arrive. Keying a *thread* summary
-     * on it would pin the first summary of an empty thread forever, so the
-     * last segment is a hash of the model input instead. See
-     * `ThreadSummarySchema.inputKey` in `@yahn/schema`.
+     * `pk=ITEM#<id>` / `sk=ENRICH#<kind>#<generatedAt>#<inputKey>`. The plan
+     * reserved `sk=ENRICH#<kind>#<contentKey>`; both that and a bare input
+     * hash turned out wrong in opposite directions, and the reasoning lives
+     * with the code that depends on it — `apps/api/src/enrich/store.ts` and
+     * `.claude/rules/api.md`.
      *
      * On-demand billing because the traffic is one write per new thread
      * version and a handful of reads; provisioned capacity here would be a

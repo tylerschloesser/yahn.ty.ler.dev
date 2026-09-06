@@ -40,10 +40,19 @@ const DEFAULT_STRATEGY: SelectionStrategy = 'budget'
 const STRATEGIES = new Set<string>(['full', 'top-level', 'budget'])
 
 /**
- * How much of a large thread `budget` sends. Measured, not chosen by feel —
- * see `.claude/rules/api.md`. `?strategy=` and `?budget=` exist so the
- * measurement behind that number can be re-run against a deployed edge without
- * a redeploy, which is the standard `CLAUDE.md` sets for a claim like this.
+ * How much of a large thread `budget` sends. Measured, not chosen by feel.
+ *
+ * It is a cap, not a target: an ordinary thread goes to the model whole (item
+ * 8863's entire tree is 26k chars) and this binds only on the largest threads
+ * on HN. On a 1,622-node thread it sends 670 comments for $0.37, against
+ * $0.85 for the whole tree — and the summaries differ only in that a *smaller*
+ * budget starts losing whole disagreements, which live in deep reply chains
+ * and are what a breadth-first walk truncates first. Above 200k nothing new
+ * appeared for another $0.47. Full table in `.claude/rules/api.md`.
+ *
+ * `?strategy=` and `?budget=` exist so that measurement can be re-run against
+ * a deployed edge without a redeploy, which is the standard `CLAUDE.md` sets
+ * for a claim a rule file asserts.
  */
 const DEFAULT_BUDGET_CHARS = 200_000
 
@@ -152,7 +161,13 @@ async function run(
     const key = inputKey(rendered.text)
     const store = getStore()
 
-    const cached = await store.get(id, KIND, key)
+    const cached = await store.read({
+      itemId: id,
+      kind: KIND,
+      inputKey: key,
+      totalComments: rendered.totalComments,
+      comments: rendered.comments,
+    })
 
     const input = {
       strategy: rendered.strategy,

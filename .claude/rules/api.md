@@ -70,20 +70,64 @@ mirrors the split.
 - **`meta` is sent before any model work starts, and that is not cosmetic.** CloudFront's origin
   `readTimeout` is 60s and applies to the first byte *and* to the gap between packets, so a
   producer that thinks silently for longer is cut off at the edge while the Lambda runs on.
-- **The cache key is a hash of the model input, not the story's `contentKey`.** `contentKey` is
-  `sha256(url ?? text)`, fixed the moment a story is posted — it does not move when comments
-  arrive, so keying a *thread* summary on it would pin the first summary of an empty thread
-  forever. `sk = ENRICH#<kind>#<inputKey>` where `inputKey` hashes the exact bytes sent to the
-  model, which also means two selection strategies can never serve each other's answers.
+- **Both obvious ways to key the cache are wrong, in opposite directions, and each was caught
+  by measurement rather than by reading.** `sk = ENRICH#<kind>#<generatedAt>#<inputKey>`.
+  - The plan said `ENRICH#<kind>#<contentKey>`. A story's `contentKey` is `sha256(url ?? text)`,
+    fixed the moment it is posted — it does not move when comments arrive, so the first summary
+    of an empty thread would be served forever.
+  - Hashing the model input instead fixes that and breaks the other way. Measured against a live
+    front-page thread: **seven consecutive requests produced seven distinct keys and seven paid
+    generations.** HN re-ranks continuously and comments keep arriving, so the exact bytes are
+    never twice the same and the cache never hits *at all* — which is exactly the "serve every
+    later viewer from the table" the epoch exists to do. A pure input hash is a correct key and
+    a useless cache.
+  - So a miss falls back to the newest stored summary, reused when **the thread has not grown
+    more than 15%** since it was written *and* it read at least as much of the thread as this
+    request would. A thread that has stopped growing — which is when nearly all reads happen —
+    is then a permanent hit, while a live one regenerates on a geometric schedule instead of
+    once per viewer.
+  - **The coverage half of that rule is not optional**, and it was also caught by measurement:
+    without it a summary generated from a deliberately tiny slice was served to a request for
+    the whole thread. The reverse is fine and is allowed — a *richer* stored summary answering a
+    thinner request is both cheaper and better.
+  - `generatedAt` precedes the hash in the sort key so "newest first" is a query rather than a
+    scan. `apps/api/src/enrich/store.test.ts` pins all of the above offline.
+- **What goes to the model is `budget` capped at 200,000 characters, and that number is
+  measured.** It is a *cap*, so an ordinary thread is sent whole — item 8863's entire tree is
+  26k chars — and it binds only on the largest threads on HN. Measured end to end through a
+  deployed edge on item 49563355 (1,622 nodes), billed token counts from the model itself:
+
+  | strategy | comments sent | input tokens | cost | time to first token |
+  | --- | --- | --- | --- | --- |
+  | `budget` 40k | 92 / 1622 | 13,799 | $0.11 | 9.4s |
+  | `top-level` | 213 / 1622 | 23,313 | $0.16 | 9.9s |
+  | **`budget` 200k** | **670 / 1622** | **67,827** | **$0.37** | **11.9s** |
+  | `full` | 1515 / 1622 | 160,913 | $0.85 | 12.3s |
+
+  The quality difference is **not** in the headline points, which all four get right. It is in
+  the *disagreements*: `budget` at 40k misses entire arguments, because they live in deep reply
+  chains and a breadth-first walk truncates those first. At 200k they come back — the same
+  disputes `full` surfaces — for 55% less. Above 200k nothing new appeared for another $0.47.
+
+  Two things about that measurement are worth keeping. **The size curve is linear, with no
+  elbow** — 40k/80k/120k/200k/300k/400k chars admit 92/255/385/670/1007/1337 comments — so there
+  is no "optimal" cap to discover and this is a cost/coverage judgment, not an optimization.
+  And **the estimate the plan started from was low**: it put this thread at ~100k tokens and
+  ~$0.50, where the billed figure for the whole tree is 161k tokens and $0.85. Rendering the
+  tree as indented text rather than JSON is what shrinks it at all (718KB of JSON → 493KB of
+  text); quote billed `usage`, not a chars-per-token estimate, which was itself 25% optimistic
+  here.
+
+  `?strategy=` and `?budget=` on the endpoint exist so all of this is re-runnable against a
+  deployed edge without a redeploy.
 - **The model is reached only through `getModel()` in `src/enrich/model/`,** and
   `applyLocalDefaults()` sets `MODEL_PROVIDER ??= 'fake'`. That is what keeps `pnpm dev`,
   `pnpm verify` and `pnpm e2e` free of credentials. A real key is required in exactly one place:
   Lambda, where the CDK sets `MODEL_PROVIDER=anthropic` and grants Secrets Manager read. The key
   is fetched once per cold start and is never a plaintext env var, which would put it in the
   CloudFormation template.
-- **State is a DynamoDB `TableV2`** keyed `pk=ITEM#<id>` / `sk=ENRICH#<kind>#<inputKey>` for
-  enrichments — see the correction above; this rule previously said `<contentKey>` and that was
-  wrong for anything keyed on comments. `pk=USER#<cognitoSub>` is still the reserved shape for
+- **State is a DynamoDB `TableV2`** keyed `pk=ITEM#<id>` /
+  `sk=ENRICH#<kind>#<generatedAt>#<inputKey>` for enrichments — see the correction above. `pk=USER#<cognitoSub>` is still the reserved shape for
   per-user data and is not built.
 
 ## The schema
