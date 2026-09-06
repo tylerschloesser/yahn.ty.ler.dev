@@ -39,10 +39,14 @@ export function createEnrichApp(): Hono {
    * whether this endpoint can take a body at all is a thing to measure through
    * a deployed edge, not to assume.
    *
+   * The second path is the same handler behind the temporary `compress: true`
+   * behavior. CloudFront does not rewrite the URI on the way to the origin, so
+   * the origin has to answer both paths for one deploy to measure both.
+   *
    * `t` is the server clock at write time; `curl -N` with per-line timestamps
    * compares it against arrival.
    */
-  app.on(['GET', 'POST'], '/api/v1/enrich/spike', (c) =>
+  app.on(['GET', 'POST'], ['/api/v1/enrich/spike', '/api/v1/spike-compressed/spike'], (c) =>
     streamSSE(c, async (stream) => {
       const started = Date.now()
       await stream.writeSSE({ event: 'start', data: JSON.stringify({ t: started }) })

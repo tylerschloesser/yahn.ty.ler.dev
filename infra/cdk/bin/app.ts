@@ -33,6 +33,7 @@ new AppStack(app, 'YahnAppStack-prod', {
   env,
   domainName: ROOT_DOMAIN,
   certificateArn: CERTIFICATE_ARN,
+  retainData: true,
 })
 
 /**
@@ -53,5 +54,9 @@ if (pr !== undefined) {
     env,
     domainName: `pr-${n}.${ROOT_DOMAIN}`,
     certificateArn: CERTIFICATE_ARN,
+    // A preview's enrichment table is deleted with its stack: `cleanup.yml`
+    // removes preview stacks on a cron, and a retained table would pile up
+    // invisibly.
+    retainData: false,
   })
 }

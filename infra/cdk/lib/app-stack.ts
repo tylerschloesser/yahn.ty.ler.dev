@@ -9,10 +9,12 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs'
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as route53 from 'aws-cdk-lib/aws-route53'
 import * as targets from 'aws-cdk-lib/aws-route53-targets'
 import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment'
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
 import type { Construct } from 'constructs'
 import { HOSTED_ZONE_ID, ZONE_NAME } from './config.js'
 
@@ -21,6 +23,14 @@ interface AppStackProps extends StackProps {
   domainName: string
   /** The shared wildcard cert from YahnSharedStack, hard-coded in bin/app.ts. */
   certificateArn: string
+  /**
+   * True for `YahnAppStack-prod` only. It decides one thing: whether the
+   * enrichment table survives a stack delete. A preview's table must not —
+   * `cleanup.yml` deletes preview stacks on a cron and a retained table would
+   * accumulate silently — while production's holds summaries that cost real
+   * money to regenerate.
+   */
+  retainData: boolean
 }
 
 export class AppStack extends Stack {
@@ -86,6 +96,52 @@ export class AppStack extends Stack {
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
     })
 
+    /**
+     * Where a generated enrichment lives so it is generated once.
+     *
+     * `pk=ITEM#<id>` / `sk=ENRICH#<kind>#<inputKey>`, the shape reserved for it
+     * in `.claude/rules/api.md` — with one correction. That rule says
+     * `sk=ENRICH#<kind>#<contentKey>`, and `contentKey` is
+     * `sha256(url ?? text)`, which for a story is fixed the moment it is
+     * posted and does not change as comments arrive. Keying a *thread* summary
+     * on it would pin the first summary of an empty thread forever, so the
+     * last segment is a hash of the model input instead. See
+     * `ThreadSummarySchema.inputKey` in `@yahn/schema`.
+     *
+     * On-demand billing because the traffic is one write per new thread
+     * version and a handful of reads; provisioned capacity here would be a
+     * standing charge against a table that is idle most of the day.
+     */
+    const enrichTable = new dynamodb.TableV2(this, 'EnrichTable', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billing: dynamodb.Billing.onDemand(),
+      // A summary of a thread nobody has opened in a month is not worth
+      // storing; regenerating it costs less than keeping every one forever.
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: props.retainData ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+    })
+
+    /**
+     * Imported by name, never created here and never a plaintext env var — an
+     * env var would put the key in the CloudFormation template, which is
+     * readable by anyone who can describe the stack. The function fetches it
+     * once per cold start.
+     *
+     * `fromSecretNameV2` rather than a complete ARN so that rotating or
+     * recreating the secret (which changes its six-character suffix) does not
+     * require a redeploy; it grants against the wildcard ARN.
+     *
+     * The secret is created by hand, once, and is deliberately **not**
+     * thai.ler.dev's: a shared key would couple two unrelated projects' quota,
+     * blast radius and rotation.
+     */
+    const anthropicSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      'AnthropicSecret',
+      'yahn-ty-ler-dev/anthropic',
+    )
+
     // The enrichment function. A second function rather than a second route on
     // the first, because `invokeMode` is a property of the function URL and is
     // **fixed at creation** — a buffered URL cannot be promoted to a streaming
@@ -112,8 +168,17 @@ export class AppStack extends Stack {
       },
       environment: {
         NODE_OPTIONS: '--enable-source-maps',
+        ENRICH_TABLE_NAME: enrichTable.tableName,
+        ANTHROPIC_SECRET_ID: anthropicSecret.secretName,
+        // The only place the real provider is selected. Everywhere else —
+        // `pnpm dev`, `pnpm verify`, `pnpm e2e` — it is unset and defaults to
+        // `fake`, which is what keeps those three credential-free.
+        MODEL_PROVIDER: 'anthropic',
       },
     })
+
+    enrichTable.grantReadWriteData(enrichFn)
+    anthropicSecret.grantRead(enrichFn)
 
     const enrichFnUrl = enrichFn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
@@ -343,5 +408,6 @@ function handler(event) {
     })
     new CfnOutput(this, 'BucketName', { value: bucket.bucketName })
     new CfnOutput(this, 'EnrichFunctionName', { value: enrichFn.functionName })
+    new CfnOutput(this, 'EnrichTableName', { value: enrichTable.tableName })
   }
 }
