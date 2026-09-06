@@ -86,6 +86,40 @@ export class AppStack extends Stack {
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
     })
 
+    // The enrichment function. A second function rather than a second route on
+    // the first, because `invokeMode` is a property of the function URL and is
+    // **fixed at creation** — a buffered URL cannot be promoted to a streaming
+    // one, it has to be replaced.
+    //
+    // Memory is deliberately NOT inherited from the read function: cost is
+    // memory x duration, and this one spends most of its wall clock blocked on
+    // a model call, so paying for more vCPU across a 60s stream buys nothing on
+    // the part that dominates. See `.claude/rules/cdk.md`.
+    const enrichFn = new nodejs.NodejsFunction(this, 'EnrichFunction', {
+      entry: join(currentDir, '../../../apps/api/src/lambda-enrich.ts'),
+      runtime: lambda.Runtime.NODEJS_24_X,
+      architecture: lambda.Architecture.ARM_64,
+      handler: 'handler',
+      memorySize: 512,
+      // A model call is not a 30s workload. CloudFront gives up on the origin
+      // long before this fires (see `readTimeout` below), so this is the outer
+      // bound on a stream that is still making progress, not the SLA.
+      timeout: Duration.minutes(5),
+      bundling: {
+        target: 'node24',
+        externalModules: ['@aws-sdk/*'],
+        sourceMap: true,
+      },
+      environment: {
+        NODE_OPTIONS: '--enable-source-maps',
+      },
+    })
+
+    const enrichFnUrl = enrichFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    })
+
     // Imported, not created: this is the shared wildcard cert from
     // YahnSharedStack, so preview stacks never wait on issuance.
     const certificate = acm.Certificate.fromCertificateArn(
@@ -133,6 +167,49 @@ function handler(event) {
 
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       additionalBehaviors: {
+        // Ordered before `/api/*`: CloudFront matches the most specific path
+        // pattern, but keeping the pair adjacent and specific-first is what
+        // makes the split legible.
+        //
+        // `CACHING_DISABLED`, because a stream has nothing to cache and a
+        // cached SSE body would be served to the next viewer as a replay.
+        // `ALLOW_ALL` so the method is not the thing that decides the request
+        // shape — whether a body survives origin access control's SigV4
+        // signing is measured, not assumed.
+        //
+        // `compress: false` is a hypothesis under test, not a settled fact:
+        // gzip wants a complete body and buffering is precisely what streaming
+        // must avoid. `/api/v1/spike-compressed/*` below is the same origin
+        // with `compress: true`, so one deploy answers it.
+        '/api/v1/enrich/*': {
+          origin: origins.FunctionUrlOrigin.withOriginAccessControl(enrichFnUrl, {
+            // The time CloudFront waits for the first origin byte *and* between
+            // subsequent packets. 60s is the ceiling without a quota increase,
+            // so a stream that goes quiet for longer than this is cut off at
+            // the edge no matter what the Lambda timeout says — which is why
+            // the producer has to emit keepalives while the model thinks.
+            readTimeout: Duration.seconds(60),
+          }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          compress: false,
+        },
+        // TEMPORARY, for the Epoch 4 streaming spike only: identical to the
+        // behavior above except `compress: true`, so both can be measured
+        // against the same deployed origin in one preview rather than two.
+        // Delete once the compression question is recorded in cdk.md.
+        '/api/v1/spike-compressed/*': {
+          origin: origins.FunctionUrlOrigin.withOriginAccessControl(enrichFnUrl, {
+            readTimeout: Duration.seconds(60),
+          }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          compress: true,
+        },
         '/api/*': {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(fnUrl),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -179,6 +256,15 @@ function handler(event) {
     // auth layer — before the function is ever invoked, so nothing appears in
     // its logs. See aws/aws-cdk#35872.
     fn.addPermission('AllowCloudFrontInvokeFunction', {
+      principal: new iam.ServicePrincipal('cloudfront.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+      sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+    })
+
+    // Same grant, same reason, for the streaming function. Omitting it fails
+    // exactly the same way: 403 from the function URL's auth layer, and
+    // nothing whatsoever in the function's logs.
+    enrichFn.addPermission('AllowCloudFrontInvokeFunction', {
       principal: new iam.ServicePrincipal('cloudfront.amazonaws.com'),
       action: 'lambda:InvokeFunction',
       sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
@@ -256,5 +342,6 @@ function handler(event) {
       value: distribution.distributionDomainName,
     })
     new CfnOutput(this, 'BucketName', { value: bucket.bucketName })
+    new CfnOutput(this, 'EnrichFunctionName', { value: enrichFn.functionName })
   }
 }

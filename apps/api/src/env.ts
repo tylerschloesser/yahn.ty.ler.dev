@@ -20,4 +20,13 @@ export const env = {
   get port(): number {
     return positiveInt('PORT', 3001)
   },
+
+  /**
+   * Port for the local *enrichment* server. It is a second port rather than a
+   * second route because production is a second Lambda — see `server.ts`.
+   * Lambda never reads it either.
+   */
+  get enrichPort(): number {
+    return positiveInt('ENRICH_PORT', 3002)
+  },
 }
