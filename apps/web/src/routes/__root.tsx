@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
 import type { FormEvent } from 'react'
+import { AuthMenu } from '../components/AuthMenu/AuthMenu.tsx'
 import { SECTIONS } from '../feeds.ts'
 import styles from './__root.module.css'
 
@@ -84,6 +85,7 @@ function RootLayout() {
             />
           </form>
         </search>
+        <AuthMenu />
       </header>
 
       <main className={styles.main}>

@@ -70,3 +70,14 @@ export const AuthorItemsResponseSchema = z.looseObject({
 })
 
 export type AuthorItemsResponse = z.output<typeof AuthorItemsResponseSchema>
+
+/**
+ * The body of `GET /api/v1/me`. `email` is `z.string()`, not `z.email()`:
+ * `AUTH=local`'s dev tokens synthesize `<name>@local`, which has no dot in
+ * the domain and fails zod's `z.email()` format check, and the web client
+ * `.parse()`s every response — a strict format here would throw on every
+ * local sign-in. An anonymous caller is not a variant of this schema; a 401
+ * comes back as the ordinary `ErrorResponseSchema` shape, `{ error: string }`.
+ */
+export const MeResponseSchema = z.looseObject({ sub: z.string(), email: z.string() })
+export type MeResponse = z.output<typeof MeResponseSchema>

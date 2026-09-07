@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { apiFetch } from '@tylerschloesser/cdk-core/auth/browser'
 import type { ThreadSummary as ThreadSummaryData } from '@yahn/schema'
 import {
   ENRICH_EVENT,
@@ -49,7 +50,7 @@ export function ThreadSummary({ itemId }: ThreadSummaryProps) {
     setState({ status: 'streaming', text: '', cached: null })
 
     try {
-      const response = await fetch(`/events/v1/enrich/thread/${String(itemId)}`, {
+      const response = await apiFetch(`/events/v1/enrich/thread/${String(itemId)}`, {
         signal: controller.signal,
       })
       if (!response.ok || !response.body) {

@@ -73,7 +73,20 @@ stylelint config.
   that does not announce itself is an a11y failure. `rel="noreferrer"` yes, `target` no.
 - **TanStack Query owns all caching.** Router `loader`s call `queryClient.ensureQueryData` and
   components use `useSuspenseQuery`; `defaultPreloadStaleTime: 0` is what keeps there being
-  exactly one cache rather than the router keeping a second.
+  exactly one cache rather than the router keeping a second. **`AuthMenu` is the deliberate
+  exception**: it uses plain `useQuery` for `configQueryOptions`/`meQueryOptions`, because a
+  suspending header would hold up the whole shell to answer "who is signed in", which is not
+  worth blocking a page of stories on. It renders its signed-out state while those are pending.
+- **Every call to `/api` or `/events` goes through `apiFetch`, never a bare `fetch`.** It comes
+  from `@tylerschloesser/cdk-core/auth/browser` and is where `x-id-token` is attached, so no
+  component ever handles a token. `src/api.ts`'s `getJson` is the choke point for the five typed
+  fetchers; `ThreadSummary` calls it directly for the one SSE stream. It takes the same
+  `(input, init)` as `fetch` and passes `init` straight through, abort signal included.
+- **Vite serves `/__config.json` locally**, from the `localConfigJson()` plugin in
+  `vite.config.ts`, because a real deploy writes that file into the asset prefix and the bundle
+  reads its environment at runtime rather than at build time — one CI build serves prod and every
+  preview. It is registered in **both** `configureServer` and `configurePreviewServer`, and the
+  local body has no `auth` key, which is what makes the dev-login box the only sign-in locally.
 - The dev server proxies `/api` to **`http://localhost:3001`, a real local backend** — not
   production, unlike thai.ler.dev. `pnpm dev` runs both. This is deliberate and load-bearing:
   it is what lets a session verify its own work before opening a PR, and it is free because

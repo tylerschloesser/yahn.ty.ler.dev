@@ -1,8 +1,10 @@
+import { apiFetch } from '@tylerschloesser/cdk-core/auth/browser'
 import {
   AuthorItemsResponseSchema,
   ErrorResponseSchema,
   FeedResponseSchema,
   ItemResponseSchema,
+  MeResponseSchema,
   SearchResponseSchema,
   UserResponseSchema,
 } from '@yahn/schema'
@@ -12,19 +14,22 @@ import type {
   FeedName,
   FeedResponse,
   ItemResponse,
+  MeResponse,
   SearchResponse,
   SearchSort,
   User,
 } from '@yahn/schema'
 
 /**
- * Thin typed fetchers over `fetch`. Always same-origin, relative paths —
+ * Thin typed fetchers over `apiFetch`. Always same-origin, relative paths —
  * never a base URL — because the dev proxy and (eventually) CloudFront both
- * make `/api/*` same-origin already.
+ * make `/api/*` same-origin already. `apiFetch` (not `fetch`) is the point:
+ * it is where the `x-id-token` header gets attached, so no component or
+ * fetcher here ever has to know a token exists.
  */
 
 async function getJson(path: string): Promise<unknown> {
-  const response = await fetch(path)
+  const response = await apiFetch(path)
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null)
     const parsed = ErrorResponseSchema.safeParse(body)
@@ -75,4 +80,18 @@ export async function fetchAuthorItems(
   const params = new URLSearchParams({ type, page: String(page - 1) })
   const body = await getJson(`/api/v1/users/${encodeURIComponent(id)}/items?${params.toString()}`)
   return AuthorItemsResponseSchema.parse(body)
+}
+
+// Can't go through `getJson`: it throws on any non-2xx, but a 401 here is
+// the ordinary anonymous answer, not an error.
+export async function fetchMe(): Promise<MeResponse | null> {
+  const response = await apiFetch('/api/v1/me')
+  if (response.status === 401) return null
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null)
+    const parsed = ErrorResponseSchema.safeParse(body)
+    const message = parsed.success ? parsed.data.error : response.statusText
+    throw new Error(`${response.status} ${message}`)
+  }
+  return MeResponseSchema.parse(await response.json())
 }

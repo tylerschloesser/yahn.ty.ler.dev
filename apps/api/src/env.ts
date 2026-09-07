@@ -102,4 +102,7 @@ export const AWS_REGION = process.env.AWS_REGION ?? 'us-east-1'
 export function applyLocalDefaults(): void {
   process.env.STORE ??= 'memory'
   process.env.MODEL_PROVIDER ??= 'fake'
+  // The CDK only ever emits AUTH=cognito. `local` trusts any `x-id-token`
+  // starting with `dev:`, which is what keeps sign-in credential-free here.
+  process.env.AUTH ??= 'local'
 }

@@ -41,8 +41,8 @@ copy.
 | Stack | Deployed by | Holds |
 | --- | --- | --- |
 | `YahnShared` | `deploy.yml`, and by hand first | the one ACM certificate, SANs `[yahn.ty.ler.dev, *.preview.yahn.ty.ler.dev]` |
-| `YahnPreview` | `deploy.yml` (rarely changes) | preview bucket, KeyValueStore, router function, the preview distribution, wildcard DNS, SSM params |
-| `YahnSite` | `deploy.yml` on `main` | prod bucket, distribution, apex DNS, **both Lambdas, the `EnrichTable`, the log groups** |
+| `YahnPreview` | `deploy.yml` (rarely changes) | preview bucket, KeyValueStore, router function, the preview distribution, wildcard DNS, SSM params, **the preview Cognito pool + machine client + machine user + its secret** |
+| `YahnSite` | `deploy.yml` on `main` | prod bucket, distribution, apex DNS, **both Lambdas, the `EnrichTable`, the log groups, the prod Cognito pool** |
 | `Yahn-pr-<n>` | `pr-preview.yml` per PR | that PR's two Lambdas + a `PreviewDeployment` (assets under `pr-<n>/`, one KVS key) |
 | `YahnGithubOidc` | **you, locally, once** | the `yahn-github-deploy` role; its ARN is the `AWS_DEPLOY_ROLE_ARN` repo variable |
 
@@ -128,6 +128,44 @@ domain again within minutes.
 - `bin/app.ts` has no relative imports, so the old ".js extensions on relative imports" rule has
   nothing left to apply to. If a second file ever appears here, the app runs through `tsx` under
   `nodenext` and that rule returns.
+
+## Auth: which stack owns which pool, and the SSM sequencing trap
+
+One `auth` key in `bin/app.ts` turns all of it on. `defineSiteStacks` then creates the prod pool
+in `YahnSite`, the preview pool plus a `machine` app client, the `claude` native user and the
+`yahn.ty.ler.dev/preview-machine-user` secret in `YahnPreview`, four more SSM params, and
+`AUTH`/`AUTH_ISSUER`/`AUTH_CLIENT_ID` on **both** backend Lambdas in every stack.
+`.claude/rules/auth.md` is the mechanism; this section is only what `infra/cdk` and the workflows
+have to get right.
+
+- **The two `domainPrefix` values (`yahn-ty-ler-dev`, `yahn-ty-ler-dev-preview`) are written out
+  rather than defaulted**, because the same two strings appear in the shared
+  `cdk-core/google-oauth` client's authorized redirect URIs, which no API manages. Renaming one
+  here without a human editing Google's console is a `redirect_uri_mismatch` **at Google, with
+  nothing in any AWS log**.
+- **`oauth.preview.yahn.ty.ler.dev` needs no DNS work.** The bounce host resolves through the
+  permanent `*.preview.yahn.ty.ler.dev` A/AAAA records, and the certificate's
+  `*.preview.yahn.ty.ler.dev` SAN already covers it. Nothing was added for it.
+- **The SSM sequencing trap, and it fails the deploy rather than the synth.** `PreviewDeployment`
+  reads `authIssuer` / `authClientId` / `authMachineClientId` / `authDomain` with
+  `ssm.StringParameter.valueForStringParameter`, which renders a `{{resolve:ssm:…}}` dynamic
+  reference that **CloudFormation** resolves. So `cdk synth Yahn-pr-<n> -c pr=<n>` succeeds with
+  no credentials and no params, and the failure only appears when `pr-preview.yml` deploys — as a
+  CloudFormation error that does not name the cause. Those four params are created by
+  `YahnPreview`, so **`YahnPreview` must be deployed before the first PR preview that reads
+  them**:
+  ```
+  eval "$(aws configure export-credentials --profile admin --format env)"
+  pnpm build && pnpm --filter @yahn/cdk exec cdk deploy YahnPreview
+  ```
+  A PR stack synthesized from a branch whose `bin/app.ts` has **no** `auth` key never reads them,
+  so open PRs predating this are unaffected until they rebase.
+- **`YahnGithubOidc` needed no redeploy for this** — `cdk diff` reported *no differences*, and its
+  policy already grants `secretsmanager:GetSecretValue` on
+  `yahn.ty.ler.dev/preview-machine-user-*`, which is the only IAM permission the machine-login
+  path needs. `initiate-auth` is unauthenticated and is called `--no-sign-request`.
+- **Cognito's free tier is 10,000 MAU per account**, so two more pools alongside thai's and
+  cdk-core's cost $0.
 
 ## Caching — the deliberate divergence from thai, now expressed through the package
 

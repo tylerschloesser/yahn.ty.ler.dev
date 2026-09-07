@@ -31,11 +31,12 @@ subtly-wrong logic this rule exists to protect, even though it lives inside `app
 - Assert against `StorySchema.parse` / `CommentSchema.parse`, not against hand-written object
   literals, so a normalizer that drifts from the contract fails here rather than in the browser.
 
-## Playwright, four specs
+## Playwright, six specs
 
 `smoke.spec.ts` (the vertical slice), `feeds.spec.ts` (the six feeds and pagination),
-`search-and-user.spec.ts`, `thread.spec.ts` (collapse, the `/item?id=` redirect, bylines).
-Split by area rather than by page so a failure names the thing that broke.
+`search-and-user.spec.ts`, `thread.spec.ts` (collapse, the `/item?id=` redirect, bylines),
+`summary.spec.ts`, `auth.spec.ts`. Split by area rather than by page so a failure names the
+thing that broke.
 
 - **Write the spec before the UI it covers.** Epoch 1 did this and it is why its specs survived
   a component rewrite: the `data-testid` set was a contract the components were built against,
@@ -47,9 +48,19 @@ Split by area rather than by page so a failure names the thing that broke.
   a comment count; clicking the first shows a comment tree" is testable. "The top story is X" is
   not, and a test that asserts it will fail for someone else, tomorrow, for no reason.
 - **One config, two targets.** With `PLAYWRIGHT_BASE_URL` unset, `playwright.config.ts` boots
-  `pnpm dev` itself via `webServer` and tests `localhost`. Set it — `PLAYWRIGHT_BASE_URL=https://pr-123.yahn.ty.ler.dev pnpm e2e` — and the identical spec runs against a
-  deployed preview with no server of its own. Keep any new spec runnable both ways; anything
-  that only works locally belongs in vitest instead.
+  `pnpm dev` itself via `webServer` and tests `localhost`. Set it —
+  `PLAYWRIGHT_BASE_URL=https://pr-123.preview.yahn.ty.ler.dev pnpm e2e` — and the identical spec
+  runs against a deployed preview with no server of its own. Keep any new spec runnable both
+  ways; anything that only works locally belongs in vitest instead.
+- **Auth makes it three targets**, and `e2e/fixtures.ts` derives them from that same variable:
+  `local` (unset), `preview` (a `pr-<n>.preview.…` host) and `prod` (anything else). Everything
+  target-specific lives in a fixture or in a `test.skip(TARGET === 'prod', …)` at **declaration**
+  scope — never a branch inside a test body, and never an in-body skip: Playwright resolves a
+  test's fixtures before running the body, so `machineAuth` would already have thrown. That
+  fixture throws loudly on `prod` rather than yielding a useless token, because **prod has no
+  machine identity by design** and a spec reaching for one there has forgotten its skip. The
+  assertion that earns the whole arrangement is the negative one: a *preview* token sent to
+  production must be 401. See `.claude/rules/auth.md`.
 - **You rarely need to run the preview target by hand: `pr-preview.yml` already does**, after a
   gate that waits for `/api/health`. Previews live at `pr-<N>.preview.yahn.ty.ler.dev` behind a
   permanent wildcard record, so a stale NXDOMAIN in your resolver is no longer the failure mode;

@@ -1,0 +1,62 @@
+.menu {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-2);
+}
+
+.user {
+  color: var(--color-accent-solid-text);
+}
+
+.button {
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--text-2);
+  color: var(--color-accent-solid-text);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-1);
+  opacity: 0.75;
+}
+
+@media (hover: hover) {
+  .button:hover {
+    text-decoration: underline;
+    opacity: 1;
+  }
+}
+
+/* The global ring is orange-8, which vanishes against the orange bar. */
+.button:focus-visible {
+  outline-color: var(--color-focus-ring-on-accent);
+}
+
+.input {
+  width: 8rem;
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--text-2);
+  color: var(--color-text-strong);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-1);
+}
+
+/* The global ring is orange-8, which vanishes against the orange bar. */
+.input:focus-visible {
+  outline-color: var(--color-focus-ring-on-accent);
+}
+
+/* Visually hidden, not `display: none` — the input still needs an accessible name. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip-path: inset(50%);
+}

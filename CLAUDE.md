@@ -27,6 +27,7 @@ than waiting for it to load.
 | `web-ui.md` | `apps/web/**` | tokens, CSS Modules, Base UI, `data-*` variants, Query-owns-cache |
 | `testing.md` | `e2e/**`, `**/*.test.ts` | offline vitest, structural-not-content Playwright, pointing it at a preview |
 | `cdk.md` | `infra/cdk/**`, `.github/workflows/**` | the five stacks and what is the package's, the committed `cdk.context.json`, the caching divergence, the preview lifecycle, the sweeper |
+| `auth.md` | `apps/api/src/auth.ts`, `AuthMenu/**`, `auth.callback.tsx`, `e2e/fixtures.ts`, `scripts/preview-login.sh` | the two Cognito pools and why they are isolated, the shared Google client, `x-id-token`, the three `AUTH` modes, the machine user and its lockout |
 
 **`docs/hn-api.md` is the canonical HN API reference** — every endpoint, every field per item
 type, the tombstone shapes, measured request counts and latencies. It was mined from the

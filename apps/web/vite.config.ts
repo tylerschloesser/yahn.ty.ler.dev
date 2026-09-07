@@ -1,6 +1,38 @@
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+
+// Serves the same `__config.json` a real deploy writes into the asset prefix:
+// the bundle learns its environment at runtime, never at build time, so
+// local dev has to hand it one too. Shared between `configureServer` (vite
+// dev) and `configurePreviewServer` (vite preview) so both loops match a
+// real deploy. `mode: 'local'` carries no `auth` key — there is no user pool
+// locally.
+function localConfigJson(): Plugin {
+  const serve = (
+    req: import('http').IncomingMessage,
+    res: import('http').ServerResponse,
+    next: () => void,
+  ): void => {
+    if (req.url !== '/__config.json') {
+      next()
+      return
+    }
+    res.setHeader('content-type', 'application/json')
+    res.setHeader('cache-control', 'no-store')
+    res.end(JSON.stringify({ site: 'localhost', mode: 'local' }))
+  }
+
+  return {
+    name: 'local-config-json',
+    configureServer(server) {
+      server.middlewares.use(serve)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(serve)
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -8,6 +40,7 @@ export default defineConfig({
     // Must precede the React plugin so generated route modules are transformed.
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react(),
+    localConfigJson(),
   ],
   server: {
     proxy: {

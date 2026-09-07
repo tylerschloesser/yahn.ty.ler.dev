@@ -75,13 +75,15 @@ Four properties, all free to build now and expensive to retrofit:
    is a different Lambda on a different behavior — it streams, and response streaming is an
    invoke-mode property of a Function URL that is fixed at creation. It lives at
    `GET /events/v1/enrich/**`.
-4. **`getUserId()` returns `null` today** from one function. When Cognito lands, that function
-   changes and nothing else does.
+4. **The API learns who is calling from exactly one function**, `getAuthUser()`. Cognito has
+   since landed behind it, and nothing else in the API changed — which is the property, not the
+   auth. Per-user enrichments partition on whatever it returns.
 
 ## API
 
 ```
 GET /api/health
+GET /api/v1/me                     the caller's Cognito identity, or 401
 GET /api/v1/feeds/:feed?page=1     feed ∈ top|new|best|ask|show|job
 GET /api/v1/items/:id
 GET /api/v1/users/:id
@@ -89,16 +91,18 @@ GET /api/v1/search?q=&page=&sort=relevance|date
 GET /events/v1/enrich/thread/:id  streams SSE
 ```
 
-Same-origin under one CloudFront distribution, so no CORS and no preflight — and cookies will
-work when auth arrives. The origin sets short `Cache-Control` with `stale-while-revalidate`;
+Same-origin under one CloudFront distribution, so no CORS and no preflight. Sign-in is Google
+through Cognito, and the ID token travels in `x-id-token` rather than `Authorization`, which
+CloudFront's origin access control overwrites with its own SigV4 signature. The origin sets short
+`Cache-Control` with `stale-while-revalidate`;
 CloudFront honors it, which is how a cached front page becomes one edge hit instead of 31 HN
 requests.
 
 ## Deployment
 
 Live at **https://yahn.ty.ler.dev**. One CloudFront distribution serves the static app from S3
-and `/api/*` from a Lambda function URL, so the API is same-origin: no CORS, no preflight, and
-cookies will work when auth lands. The infrastructure is `infra/cdk/bin/app.ts`, one
+and `/api/*` from a Lambda function URL, so the API is same-origin: no CORS and no preflight.
+The infrastructure is `infra/cdk/bin/app.ts`, one
 `defineSiteStacks()` call into `@tylerschloesser/cdk-core`, the package extracted from this site
 and thai.ler.dev.
 
