@@ -11,12 +11,12 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
 `bin/app.ts` and every CLI call needs `--region us-east-1`. Local access is SSO:
 `aws sso login --profile admin`, then prefix with `AWS_PROFILE=admin`.
 
-**If the CDK CLI says `Session token not found or invalid` while
+**If the CDK CLI or `cdk-core sweep` says `Session token not found or invalid` while
 `AWS_PROFILE=admin aws sts get-caller-identity` works**, the AWS CLI is running on cached role
-credentials the JS SDK does not share. Hand the CDK the same credentials:
-`eval "$(aws configure export-credentials --profile admin --format env)"`, then run the `cdk`
-command in that shell. Seen on 2026-09-07 during the migration, on a token with 50 minutes
-left; a fresh `aws sso login` is the other fix.
+credentials the JS SDK does not share. Hand the JS tools the same credentials:
+`eval "$(aws configure export-credentials --profile admin --format env)"`, then run the command
+in that shell. Seen on 2026-09-07 during the migration, on a token with 50 minutes left, for
+both the CDK CLI and the sweeper; a fresh `aws sso login` is the other fix.
 
 > **The account hosts thai.ler.dev's live production stacks** (`ThaiLerDevSiteStack`,
 > `ThaiLerDevGithubOidcStack`), cdk-core's own site (`CdkCore*`), and other unrelated production
@@ -63,11 +63,13 @@ copy.
   decides the `EnrichTable`'s removal policy (RETAIN in prod, where summaries cost real money to
   regenerate; DESTROY in a preview, which the sweeper deletes on a cron) and the log groups'
   retention and policy (two years + RETAIN, one week + DESTROY).
-- **Log groups are explicit and stack-owned here**, unlike the package's own functions. That
-  means a PR stack's delete takes its groups with it, and it means their names are
-  `YahnSite-ApiLogs…`, not `/aws/lambda/…` — so `cdk-core sweep`'s log-group step, which matches
-  `^/aws/lambda/Yahn-pr-`, has nothing to reclaim for this site and that is correct, not a gap.
-  Yahn's old stacks did leak twenty `/aws/lambda/YahnAppStack-*` groups; the new shape cannot.
+- **The two Lambdas' log groups are explicit and stack-owned here**, so a PR stack's delete
+  takes them with it, and their names are `YahnSite-ApiLogs…`, not `/aws/lambda/…`. The
+  package's **custom-resource** Lambdas (bucket deployment, the preview-resources handler and
+  its provider) still create implicit `/aws/lambda/Yahn-pr-<n>-…` groups on first invoke that
+  no stack owns — `Yahn-pr-11` left three behind on 2026-09-07 — and that is precisely what
+  `cdk-core sweep`'s fourth step (`^/aws/lambda/Yahn-pr-`) reclaims once the PR is closed. The
+  old stacks had leaked 24 `/aws/lambda/YahnAppStack-*` groups; those were deleted by hand.
 
 ## `cdk.context.json` is committed, and it can go stale
 
@@ -88,11 +90,14 @@ commit the result, and redeploy `YahnGithubOidc` by hand.
 ACM validates a domain and its wildcard with **one** CNAME, `_<hash>.yahn.ty.ler.dev`. The old
 `YahnSharedStack` certificate (`yahn.ty.ler.dev` + `*.yahn.ty.ler.dev`) and the new `YahnShared`
 one (`yahn.ty.ler.dev` + `*.preview.yahn.ty.ler.dev`) both need that record for the apex name,
-and CloudFormation created it under the *old* stack. Deleting the old stack can remove it, and
-the new certificate then fails to **auto-renew in 13 months with no error anywhere** — ACM only
-reports it when renewal is already overdue.
+and CloudFormation created it under the *old* stack. Deleting the old stack could have removed
+it, and the new certificate would then fail to **auto-renew in 13 months with no error
+anywhere** — ACM only reports it when renewal is already overdue.
 
-After any deletion of a certificate stack for this domain, re-check:
+**Measured 2026-09-07: it survived.** `YahnSharedStack` was deleted after `YahnShared` had
+issued its certificate against the same `_834f9b6b….yahn.ty.ler.dev` record, and the record was
+still in the zone afterwards. That is one observation of CloudFormation's behaviour, not a
+guarantee, so after any deletion of a certificate stack for this domain, re-check:
 
 ```
 aws acm describe-certificate --region us-east-1 --certificate-arn <new cert> \
@@ -216,9 +221,11 @@ router reads a KeyValueStore keyed by hostname, rewrites assets to `pr-<n>/` in 
 bucket, and re-points `/api/*` and `/events/*` at that PR's Lambda URLs per request.
 
 - **A preview deploy is one stack of two Lambdas plus asset upload and a KVS write**, not a
-  CloudFront distribution create. cdk-core measures ~95 s on its own site against the old
-  clone-per-PR's ~6 min; the sticky comment on every PR reports `deploy N s · push → comment N s`,
-  so the number for this site is on the migration PR and every PR after it.
+  CloudFront distribution create. Measured on this site on 2026-09-07: PR #11 (the migration)
+  `deploy 97 s · push → comment 223 s`, PR #12 (an empty commit) `deploy 95 s · push → comment
+  202 s`, against the old clone-per-PR's ~6 min. Teardown: the workflow ran in 17 s, the stack
+  was gone and the host answered 404 from outside within ~100 s of the close. The sticky comment
+  on every PR reports the same two numbers, so drift shows up without anyone timing it.
 - **`cancel-in-progress: false` on everything that touches CloudFormation is load-bearing.**
   Cancelling the job does not cancel the deploy it started; the next push would find the stack
   `UPDATE_IN_PROGRESS`. `pr-teardown.yml` shares the *same* concurrency group so a teardown can
@@ -255,6 +262,9 @@ which reconciles four things against the list of open PRs: `Yahn-pr-<n>` stacks,
    `.claude/settings.json`. It exits non-zero if it *would* delete anything, so a green dry run
    is a positive statement that the account is clean:
    `GH_TOKEN=$(gh auth token) AWS_PROFILE=admin pnpm --filter @yahn/cdk exec cdk-core sweep --site yahn.ty.ler.dev --stack-prefix Yahn --repo tylerschloesser/yahn.ty.ler.dev --dry-run`.
+   **Proven on this site 2026-09-07**: after PRs #11 and #12 closed, the real sweep
+   (`cleanup.yml`, dispatched by hand) deleted their six leaked custom-resource log groups and
+   nothing else, and the dry run then exited 0.
 
 The deploy role trusts `ref:refs/heads/main` and `pull_request` and nothing else, in both the
 legacy and the immutable `sub` forms — so a `workflow_dispatch` from another branch is refused
