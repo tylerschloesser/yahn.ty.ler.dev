@@ -72,9 +72,9 @@ Four properties, all free to build now and expensive to retrofit:
    is cached against: a summary stays valid exactly as long as the content it summarized is
    unchanged. Impossible to backfill consistently later.
 3. **The read path is GET-only and deterministic**, so CloudFront caches it hard. Enrichment
-   will be a different Lambda on a different behavior — it streams, and response streaming is an
-   invoke-mode property of a Function URL that is fixed at creation. `POST /api/v1/enrich/**` is
-   reserved for it.
+   is a different Lambda on a different behavior — it streams, and response streaming is an
+   invoke-mode property of a Function URL that is fixed at creation. It lives at
+   `GET /events/v1/enrich/**`.
 4. **`getUserId()` returns `null` today** from one function. When Cognito lands, that function
    changes and nothing else does.
 
@@ -86,6 +86,7 @@ GET /api/v1/feeds/:feed?page=1     feed ∈ top|new|best|ask|show|job
 GET /api/v1/items/:id
 GET /api/v1/users/:id
 GET /api/v1/search?q=&page=&sort=relevance|date
+GET /events/v1/enrich/thread/:id  streams SSE
 ```
 
 Same-origin under one CloudFront distribution, so no CORS and no preflight — and cookies will

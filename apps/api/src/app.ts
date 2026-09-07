@@ -11,12 +11,11 @@ import { getUserId } from './auth.ts'
  * ordering, node caps, tombstones — lives in `@yahn/hn`, where it is pure and
  * unit-tested without a server.
  *
- * `POST /api/v1/enrich/**` is reserved and built in a later epoch. It cannot
- * share this Lambda: enrichment streams (SSE), and response streaming is an
- * invoke-mode property of the Function URL that is fixed at creation. Nor can
- * it share a CloudFront behavior, since these responses are cached hard and
- * that one must not be cached at all. Reserving the prefix now is what makes
- * that split cheap later.
+ * The enrichment API lives at `GET /events/v1/enrich/**`, in `src/enrich/app.ts`
+ * behind a second Lambda. It cannot share this one: enrichment streams (SSE),
+ * and response streaming is an invoke-mode property of the Function URL that
+ * is fixed at creation; and these responses must never be cached while reads
+ * are cached hard, which is a property of a CloudFront behavior.
  */
 
 type Variables = { userId: string | null }

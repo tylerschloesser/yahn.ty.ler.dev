@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 /**
- * `ThreadSummary` streams `GET /api/v1/enrich/thread/:id` and renders the
+ * `ThreadSummary` streams `GET /events/v1/enrich/thread/:id` and renders the
  * markdown as it arrives. Assertions are structural only: the summary text
  * comes from a model (the `fake` provider locally and in CI, a real one on a
  * deployed preview) and differs every run, so nothing here checks content —

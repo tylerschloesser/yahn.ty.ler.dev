@@ -59,7 +59,7 @@ const DEFAULT_BUDGET_CHARS = 200_000
 export function createEnrichApp(): Hono {
   const app = new Hono()
 
-  app.get('/api/v1/enrich/health', (c) => {
+  app.get('/events/v1/enrich/health', (c) => {
     c.header('Cache-Control', 'no-store')
     return c.json({ ok: true })
   })
@@ -72,7 +72,7 @@ export function createEnrichApp(): Hono {
    * itself. Everything this needs is an item id, which fits in the path. The
    * result table is in `.claude/rules/cdk.md`.
    */
-  app.get('/api/v1/enrich/thread/:id', (c) => {
+  app.get('/events/v1/enrich/thread/:id', (c) => {
     const id = Number(c.req.param('id'))
     const strategyParam = c.req.query('strategy')
     const budgetParam = Number(c.req.query('budget'))

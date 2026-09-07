@@ -16,12 +16,11 @@ export default defineConfig({
       // local backend rather than production, so local requests never touch
       // production data.
       //
-      // Enrichment is listed first because Vite matches proxy keys by prefix in
-      // insertion order, and `/api` would otherwise swallow it. It is a separate
-      // server for the same reason it is a separate Lambda in production:
-      // response streaming is fixed at function-URL creation, and these
-      // responses must never be cached while reads are cached hard.
-      '/api/v1/enrich': { target: 'http://localhost:3002', changeOrigin: true },
+      // Enrichment is a separate server for the same reason it is a separate
+      // Lambda in production: response streaming is fixed at function-URL
+      // creation, and these responses must never be cached while reads are
+      // cached hard.
+      '/events': { target: 'http://localhost:3002', changeOrigin: true },
       '/api': { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
