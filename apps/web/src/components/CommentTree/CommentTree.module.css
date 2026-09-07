@@ -55,9 +55,11 @@
   border-radius: var(--radius-1);
 }
 
-.author:hover {
-  color: var(--color-accent-text);
-  text-decoration: underline;
+@media (hover: hover) {
+  .author:hover {
+    color: var(--color-accent-text);
+    text-decoration: underline;
+  }
 }
 
 .body {

@@ -45,8 +45,10 @@
   opacity: 0.75;
 }
 
-.navItem:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .navItem:hover {
+    text-decoration: underline;
+  }
 }
 
 /* The global ring is orange-8, which vanishes against the orange bar. */
