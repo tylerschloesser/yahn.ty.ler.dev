@@ -20,8 +20,10 @@
   border-radius: var(--radius-1);
 }
 
-.sortLink:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .sortLink:hover {
+    text-decoration: underline;
+  }
 }
 
 .sortLink[data-active] {

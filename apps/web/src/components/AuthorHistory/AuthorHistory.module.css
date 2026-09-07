@@ -16,8 +16,10 @@
   border-radius: var(--radius-1);
 }
 
-.filter:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .filter:hover {
+    text-decoration: underline;
+  }
 }
 
 .filter[data-active] {
@@ -59,8 +61,10 @@
   border-radius: var(--radius-1);
 }
 
-.title:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .title:hover {
+    text-decoration: underline;
+  }
 }
 
 .host {

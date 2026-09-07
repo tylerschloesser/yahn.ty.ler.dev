@@ -12,8 +12,10 @@
   border-radius: var(--radius-1);
 }
 
-.pageLink:not([data-disabled]):hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .pageLink:not([data-disabled]):hover {
+    text-decoration: underline;
+  }
 }
 
 .pageLink[data-disabled] {
