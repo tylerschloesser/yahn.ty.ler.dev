@@ -44,6 +44,16 @@ export const EnrichmentInputSchema = z.looseObject({
   /** Characters of prompt input. The cheap proxy for cost, available offline. */
   chars: z.number().int(),
 
+  /**
+   * The `budget` strategy's char cap at generation time, `null` for the other
+   * two strategies. `store.ts`'s cheap read-through compares this against a
+   * fresh request's own budget instead of re-rendering to learn how much of
+   * the thread it would cover. `.optional()` so a row written before this
+   * field existed still parses — it just can't satisfy that comparison and
+   * falls back to a full re-render, same as today.
+   */
+  budgetChars: z.number().int().nullable().optional(),
+
   /** Billed tokens, when the provider reported them. `fake` reports none. */
   inputTokens: z.number().int().nullable(),
   outputTokens: z.number().int().nullable(),

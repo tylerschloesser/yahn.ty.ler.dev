@@ -48,8 +48,16 @@ export interface ReadQuery {
   inputKey: string
   /** Comments in the thread right now, to compare against what was summarized. */
   totalComments: number
-  /** Comments we would send now, so a thinner stored summary is not reused. */
-  comments: number
+  /**
+   * Comments we would send now, so a thinner stored summary is not reused.
+   * Omitted by a pre-render check that only knows the thread's total size —
+   * see `app.ts`'s cheap read-through, which asks this before ever fetching
+   * the comment tree. `strategy`/`budgetChars` stand in for it then.
+   */
+  comments?: number
+  /** Required when `comments` is omitted; ignored otherwise. */
+  strategy?: string
+  budgetChars?: number | null
 }
 
 /**
@@ -104,7 +112,18 @@ function usable(candidates: ThreadSummary[], query: ReadQuery): ThreadSummary | 
     // this, a summary generated from a deliberately tiny slice would be
     // served to a request asking for the whole thread — measured, and it is
     // exactly what happened the first time this tolerance was written.
-    const deep = candidate.input.comments >= query.comments * (1 - GROWTH_TOLERANCE)
+    //
+    // `query.comments` is only known after rendering, which the whole point
+    // of a cheap pre-check is to avoid. When it is absent, the hazard this
+    // guards against — a *different* selection reused for a request that
+    // wanted more — is caught instead by requiring the same strategy and
+    // budget: two requests with identical selection parameters render
+    // comparable coverage without either one having to render.
+    const deep =
+      query.comments !== undefined
+        ? candidate.input.comments >= query.comments * (1 - GROWTH_TOLERANCE)
+        : candidate.input.strategy === query.strategy &&
+          (candidate.input.budgetChars ?? null) === (query.budgetChars ?? null)
 
     if (fresh && deep) return candidate
   }

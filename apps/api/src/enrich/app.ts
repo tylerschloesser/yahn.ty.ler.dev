@@ -1,6 +1,7 @@
-import { getItem, NotFoundError, UpstreamError } from '@yahn/hn'
+import { firebase, getItem, NotFoundError, UpstreamError } from '@yahn/hn'
 import {
   ENRICH_EVENT,
+  type EnrichmentInput,
   type EnrichmentKind,
   type Enrichments,
   type ThreadSummary,
@@ -156,10 +157,55 @@ async function run(
   const heartbeat = setInterval(() => void out.ping(), HEARTBEAT_MS)
 
   try {
+    const store = getStore()
+
+    /**
+     * A cache hit should cost about one Firebase item fetch plus one
+     * DynamoDB query, not a full comment-tree walk. `descendants` is HN's
+     * own total comment count, one request away (`firebase.getItem`, not
+     * this package's tree-walking `getItem`), and it is enough to answer
+     * the growth half of `usable()`'s reuse rule before the tree — up to
+     * 1,600+ requests on the largest threads — is ever fetched.
+     *
+     * `descendants` is `null` on some items and Algolia lags, though that
+     * cannot bite here since this is Firebase directly; either way, `null`
+     * just skips the cheap path rather than answering wrong.
+     */
+    const meta = await firebase.getItem(id)
+    const descendants = meta.descendants ?? null
+
+    const cheapHit =
+      descendants === null
+        ? null
+        : await store.read({
+            itemId: id,
+            kind: KIND,
+            // Never a real inputKey (those are sha256 hex), so the
+            // exact-match branch in `usable()` can't fire on this query.
+            inputKey: '',
+            totalComments: descendants,
+            strategy,
+            budgetChars: strategy === 'budget' ? budgetChars : null,
+          })
+
+    if (cheapHit) {
+      await out.send(ENRICH_EVENT.meta, {
+        itemId: id,
+        cached: true,
+        inputKey: cheapHit.inputKey,
+        input: cheapHit.input,
+      })
+      await complete(out, cheapHit)
+      return
+    }
+
+    // Cheap path missed — either a genuine miss, or one the growth/strategy
+    // check couldn't confirm cheaply. Either way the tree is needed now: to
+    // render a fresh, authoritative reuse check, and because a real miss has
+    // to render it for the model anyway.
     const item = await getItem(id)
     const rendered = renderThread(item.story, item.comments, { strategy, budgetChars })
     const key = inputKey(rendered.text)
-    const store = getStore()
 
     const cached = await store.read({
       itemId: id,
@@ -169,11 +215,12 @@ async function run(
       comments: rendered.comments,
     })
 
-    const input = {
+    const input: EnrichmentInput = {
       strategy: rendered.strategy,
       comments: rendered.comments,
       totalComments: rendered.totalComments,
       chars: rendered.chars,
+      budgetChars: strategy === 'budget' ? budgetChars : null,
       inputTokens: cached?.input.inputTokens ?? null,
       outputTokens: cached?.input.outputTokens ?? null,
     }

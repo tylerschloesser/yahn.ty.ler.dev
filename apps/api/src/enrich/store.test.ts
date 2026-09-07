@@ -13,17 +13,25 @@ import { getStore, type EnrichStore } from './store.ts'
  * `STORE=memory` keeps this offline, as every test in this repo must be.
  */
 
-function summary(over: { comments: number; totalComments: number; generatedAt: number; inputKey: string }): ThreadSummary {
+function summary(over: {
+  comments: number
+  totalComments: number
+  generatedAt: number
+  inputKey: string
+  strategy?: string
+  budgetChars?: number | null
+}): ThreadSummary {
   return {
     text: `summary of ${over.comments} comments`,
     model: 'fake',
     generatedAt: over.generatedAt,
     inputKey: over.inputKey,
     input: {
-      strategy: 'budget',
+      strategy: over.strategy ?? 'budget',
       comments: over.comments,
       totalComments: over.totalComments,
       chars: over.comments * 100,
+      budgetChars: over.budgetChars ?? 200_000,
       inputTokens: null,
       outputTokens: null,
     },
@@ -100,5 +108,83 @@ describe('the enrichment read-through', () => {
     expect(
       await store.read({ itemId: 10, kind: 'thread-summary', inputKey: 'a', totalComments: 10, comments: 10 }),
     ).toBeNull()
+  })
+
+  describe('the cheap pre-render check (comments omitted)', () => {
+    // `app.ts` asks this before the tree is fetched, with only `descendants`
+    // for `totalComments` and no rendered `comments` at all — `strategy` and
+    // `budgetChars` stand in for the coverage half of the rule instead.
+
+    it('hits when strategy and budget match and the thread has not grown', async () => {
+      await store.put(11, 'thread-summary', summary({ comments: 652, totalComments: 1622, generatedAt: 100, inputKey: 'a' }))
+      const hit = await store.read({
+        itemId: 11,
+        kind: 'thread-summary',
+        inputKey: '',
+        totalComments: 1650,
+        strategy: 'budget',
+        budgetChars: 200_000,
+      })
+      expect(hit?.inputKey).toBe('a')
+    })
+
+    it('misses once the thread has grown past the tolerance', async () => {
+      await store.put(12, 'thread-summary', summary({ comments: 100, totalComments: 100, generatedAt: 100, inputKey: 'a' }))
+      expect(
+        await store.read({
+          itemId: 12,
+          kind: 'thread-summary',
+          inputKey: '',
+          totalComments: 200,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
+
+    it('misses when the stored summary used a different strategy', async () => {
+      await store.put(13, 'thread-summary', summary({ comments: 12, totalComments: 100, generatedAt: 100, inputKey: 'a', strategy: 'top-level' }))
+      expect(
+        await store.read({
+          itemId: 13,
+          kind: 'thread-summary',
+          inputKey: '',
+          totalComments: 100,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
+
+    it('misses when the stored summary used a different budget', async () => {
+      await store.put(14, 'thread-summary', summary({ comments: 92, totalComments: 100, generatedAt: 100, inputKey: 'a', budgetChars: 40_000 }))
+      expect(
+        await store.read({
+          itemId: 14,
+          kind: 'thread-summary',
+          inputKey: '',
+          totalComments: 100,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
+
+    it('falls back to a miss for a row written before budgetChars existed', async () => {
+      const legacy = summary({ comments: 100, totalComments: 100, generatedAt: 100, inputKey: 'a' })
+      // Simulates a pre-migration row: no `budgetChars` on the stored input.
+      delete legacy.input.budgetChars
+      await store.put(15, 'thread-summary', legacy)
+      expect(
+        await store.read({
+          itemId: 15,
+          kind: 'thread-summary',
+          inputKey: '',
+          totalComments: 100,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
   })
 })
