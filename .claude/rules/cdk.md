@@ -144,11 +144,12 @@ is the authority (`.claude/rules/api.md`), and `maxTtl` is the ceiling on one th
   policy already keys on `Accept-Encoding`. The streaming behavior keeps the default `false`,
   measured below.
 - **`behaviorOverrides` reaches the preview distribution too** — the package has no
-  per-distribution override, so `YahnPreview`'s `/api/*` also synthesizes `Compress: true`.
-  That is a no-op there, not a leak: CloudFront compresses only when the cache policy enables
-  `Accept-Encoding` normalization, and `CACHING_DISABLED` does not. Re-check with a preview
-  `/api/*` response (no `content-encoding`) against prod's (`br`); if a preview ever compresses,
-  this sentence is wrong and the override needs a prod-only home.
+  per-distribution override, so `YahnPreview`'s `/api/*` also synthesizes `Compress: true`, and
+  **measured on `pr-11`, it is live there**: `/api/v1/items/1` came back `content-encoding: gzip`
+  under `CACHING_DISABLED`. The first draft of this bullet predicted a no-op; it was wrong. That
+  is fine — a preview's item JSON is as big as prod's — and the streaming behavior is untouched
+  because only `api` carries the override. Anything added to `behaviorOverrides` lands on both
+  distributions; a prod-only override has no home in the package today.
 
 ## `compress` on a streaming behavior: measured, and it is a no-op
 
