@@ -1,0 +1,4 @@
+{
+  "ssm:account=063257577013:parameterName=/cdk-core/yahn.ty.ler.dev/preview/kvsArn:region=us-east-1": "arn:aws:cloudfront::063257577013:key-value-store/a9da7ff3-6477-4caa-aa60-ce280519241d",
+  "ssm:account=063257577013:parameterName=/cdk-core/yahn.ty.ler.dev/preview/bucketName:region=us-east-1": "yahnpreview-previewassets8b9f2052-hvt1e3ynqkfz"
+}

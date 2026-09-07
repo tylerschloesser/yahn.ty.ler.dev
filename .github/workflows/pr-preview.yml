@@ -1,9 +1,19 @@
-# Deploys a per-PR preview stack and comments the preview URL on the PR.
+# Deploys a per-PR preview stack and comments the preview URL, status and
+# timings on the PR.
 #
-# concurrency.cancel-in-progress is deliberately false: cancelling this job
+# `concurrency.cancel-in-progress` is deliberately false: cancelling this job
 # does not cancel the CloudFormation deploy it started, and the next push
-# would then hit a stack stuck in UPDATE_IN_PROGRESS and fail. A new push
-# just queues behind the run in flight for this PR instead.
+# would then hit a stack stuck in UPDATE_IN_PROGRESS and fail. A new push just
+# queues behind the run already in flight for this PR — and pr-teardown.yml
+# shares this exact group name, so a close can never race a deploy for the
+# same PR either.
+#
+# The comment reports deploy seconds and push-to-comment seconds so the
+# preview's cost is visible on every PR without anyone timing it by hand. The
+# old clone-per-PR preview measured ~6 min to create and ~4 min to destroy;
+# these numbers are how the migration onto the shared preview distribution is
+# judged. `date +%s` around the deploy step and from job start to the comment
+# gives both without adding a dependency.
 
 name: PR Preview
 
@@ -22,14 +32,17 @@ concurrency:
 
 jobs:
   preview:
-    # Fork PRs get no preview, and that is correct rather than a
-    # limitation: GitHub will not grant id-token: write to a workflow run
-    # triggered by a fork PR, so the deploy could not authenticate anyway.
+    # Fork PRs get no preview, and that is correct rather than a limitation:
+    # GitHub will not grant id-token: write to a workflow run triggered by a
+    # fork PR, so the deploy could not authenticate anyway.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       PR: ${{ github.event.pull_request.number }}
     steps:
+      - name: Record job start
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
@@ -50,17 +63,21 @@ jobs:
 
       - name: deploy
         id: deploy
-        run: pnpm --filter cdk exec cdk deploy YahnAppStack-pr-$PR -c pr=$PR --require-approval never
+        run: |
+          start=$(date +%s)
+          pnpm --filter @yahn/cdk exec cdk deploy "Yahn-pr-$PR" --exclusively -c "pr=$PR" --require-approval never
+          end=$(date +%s)
+          echo "seconds=$((end - start))" >> "$GITHUB_OUTPUT"
 
-      # CloudFormation reports the stack complete before the new A record has
-      # propagated, so the first Playwright navigation can hit NXDOMAIN and
-      # burn all its retries in a couple of seconds. Poll the API's own health
-      # route until DNS and the distribution agree the site is up.
+      # KVS writes for a new preview hostname reach the edge on no published
+      # SLA (AWS's own launch note says only "a few seconds"), so the stack
+      # being CREATE_COMPLETE does not mean the router at the edge already
+      # knows the hostname. Poll before handing the URL to Playwright.
       - name: Wait for the preview to answer
         run: |
           set -euo pipefail
-          url="https://pr-$PR.yahn.ty.ler.dev/api/health"
-          for i in $(seq 1 60); do
+          url="https://pr-$PR.preview.yahn.ty.ler.dev/api/health"
+          for i in $(seq 1 30); do
             if curl -fsS --max-time 10 "$url" > /dev/null; then
               echo "$url answered after $i attempt(s)"
               exit 0
@@ -70,13 +87,15 @@ jobs:
           echo "$url never answered"
           exit 1
 
+      # A bare `pnpm exec` resolves the binary directly: @playwright/test is
+      # a root devDependency here, not the e2e package's own.
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: e2e
         id: e2e
         run: pnpm e2e
         env:
-          PLAYWRIGHT_BASE_URL: https://pr-${{ github.event.pull_request.number }}.yahn.ty.ler.dev
+          PLAYWRIGHT_BASE_URL: https://pr-${{ github.event.pull_request.number }}.preview.yahn.ty.ler.dev
 
       # `always()`, so a failing preview still tells the PR where to look.
       - name: Comment preview URL
@@ -84,6 +103,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          NOW=$(date +%s)
+          TOTAL=$((NOW - JOB_START))
+          DEPLOY_SECONDS="${{ steps.deploy.outputs.seconds }}"
+
           if [ "${{ steps.deploy.outcome }}" != "success" ]; then
             STATUS="❌ deploy ${{ steps.deploy.outcome }} — the preview may not exist"
           elif [ "${{ steps.e2e.outcome }}" = "success" ]; then
@@ -91,12 +115,14 @@ jobs:
           else
             STATUS="⚠️ deployed, but e2e ${{ steps.e2e.outcome }}"
           fi
+
           gh pr comment "$PR" --edit-last --create-if-none --body "$(cat <<EOF
           ### PR Preview
 
           $STATUS
 
-          - URL: https://pr-$PR.yahn.ty.ler.dev
+          - URL: https://pr-$PR.preview.yahn.ty.ler.dev
           - Commit: ${{ github.event.pull_request.head.sha }}
+          - deploy ${DEPLOY_SECONDS} s · push → comment ${TOTAL} s
           EOF
           )"

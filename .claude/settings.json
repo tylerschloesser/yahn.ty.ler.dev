@@ -40,7 +40,7 @@
       "Bash(gh variable list:*)",
 
       "Bash(curl -sS https://yahn.ty.ler.dev/*)",
-      "Bash(curl -sS https://pr-*.yahn.ty.ler.dev/*)",
+      "Bash(curl -sS https://*.preview.yahn.ty.ler.dev/*)",
       "Bash(curl -sS http://localhost:3001/*)",
       "Bash(curl -sS http://localhost:5173/*)",
 
@@ -52,8 +52,13 @@
       "Bash(aws route53 list-resource-record-sets:*)",
       "Bash(aws iam simulate-principal-policy:*)",
       "Bash(aws sts get-caller-identity:*)",
+      "Bash(aws ssm get-parameter:*)",
+      "Bash(aws cloudfront-keyvaluestore describe-key-value-store:*)",
+      "Bash(aws cloudfront-keyvaluestore list-keys:*)",
       "Bash(pnpm --filter @yahn/cdk exec cdk diff:*)",
       "Bash(pnpm --filter @yahn/cdk exec cdk list:*)",
+      "Bash(pnpm --filter @yahn/cdk exec cdk synth:*)",
+      "Bash(pnpm --filter @yahn/cdk exec cdk-core sweep --site yahn.ty.ler.dev --stack-prefix Yahn --repo tylerschloesser/yahn.ty.ler.dev --dry-run)",
 
       "WebFetch(domain:base-ui.com)",
       "WebFetch(domain:tanstack.com)",
