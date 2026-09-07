@@ -226,6 +226,17 @@ bucket, and re-points `/api/*` and `/events/*` at that PR's Lambda URLs per requ
   202 s`, against the old clone-per-PR's ~6 min. Teardown: the workflow ran in 17 s, the stack
   was gone and the host answered 404 from outside within ~100 s of the close. The sticky comment
   on every PR reports the same two numbers, so drift shows up without anyone timing it.
+- **The comment also carries a QR of the preview URL**, so a phone scans it instead of retyping
+  the host. It is an `api.qrserver.com` image because GitHub strips `data:` URIs and inline
+  `<svg>` from comments; camo caches it, so an existing comment survives the service going away.
+  Re-check with
+  `curl -sSI "https://api.qrserver.com/v1/create-qr-code/?size=180x180&qzone=2&data=https%3A%2F%2Fpr-14.preview.yahn.ty.ler.dev"`,
+  expecting `200` and `image/png` — a broken image in a *new* comment is that service, not the
+  preview. **This workflow is an adapted copy of cdk-core's template, not a rendered instance**,
+  and it has already diverged in four ways the placeholders do not cover: `node-version: 24` vs
+  22, `--filter @yahn/cdk` vs `infra`, `/api/health` vs `/api/ping`, and a root
+  `pnpm exec playwright` vs `--filter e2e`. Nothing detects that drift, so a change worth having
+  in both — the QR was one — is made in both repos by hand.
 - **`cancel-in-progress: false` on everything that touches CloudFormation is load-bearing.**
   Cancelling the job does not cancel the deploy it started; the next push would find the stack
   `UPDATE_IN_PROGRESS`. `pr-teardown.yml` shares the *same* concurrency group so a teardown can
