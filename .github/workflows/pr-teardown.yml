@@ -1,6 +1,16 @@
 # Tears down a PR's preview stack when the PR closes (merged or not).
 #
-# concurrency uses the *same* group as pr-preview.yml on purpose, so a
+# The previous teardown here ran `cdk destroy`, which needed a checkout and a
+# build. A raw `delete-stack` needs neither, which matters because a PR whose
+# branch no longer builds still has to be torn down — `cdk destroy` would
+# fail to synthesize against it. The stack's own `autoDeleteObjects` bucket
+# helper and its `KvsRoute` custom resource (the thing that removes this PR's
+# hostname from the shared KeyValueStore) both run as part of the stack
+# delete regardless of how that delete was triggered, so nothing here has to
+# orchestrate them by hand. And not waiting on the delete keeps this workflow
+# to seconds — there is nothing useful to do with the wait anyway.
+#
+# `concurrency` uses the *same* group as pr-preview.yml on purpose, so a
 # teardown can never run concurrently with a deploy for the same PR —
 # whichever started first finishes before the other begins.
 
@@ -13,6 +23,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  pull-requests: write
 
 concurrency:
   group: pr-preview-${{ github.event.pull_request.number }}
@@ -20,33 +31,50 @@ concurrency:
 
 jobs:
   teardown:
-    # Same fork guard as pr-preview.yml: a fork PR never got a preview
-    # stack (it couldn't authenticate to create one), so there is nothing
-    # to tear down and no id-token to do it with anyway.
+    # Same fork guard as pr-preview.yml: a fork PR never got a preview stack
+    # (it couldn't authenticate to create one), so there is nothing to tear
+    # down and no id-token to do it with anyway.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       PR: ${{ github.event.pull_request.number }}
+      STACK: Yahn-pr-${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      # cdk destroy still synthesizes the app, and the app stack reads
-      # apps/web/dist and throws without it.
-      - run: pnpm build
-
       - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
           role-session-name: github-actions-pr-teardown
 
-      - run: pnpm --filter cdk exec cdk destroy YahnAppStack-pr-$PR -c pr=$PR --force
+      # Most closed PRs did have a preview, but not all (a PR closed before
+      # its first push, or one whose preview already failed to create). Look
+      # before commenting, so a no-op run does not claim it tore down a stack
+      # that never existed.
+      - id: stack
+        run: |
+          if aws cloudformation describe-stacks --region us-east-1 --stack-name "$STACK" >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "$STACK does not exist"
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.stack.outputs.exists == 'true'
+        run: aws cloudformation delete-stack --region us-east-1 --stack-name "$STACK"
+
+      # `GH_REPO`, because this job deliberately has no checkout: with no git
+      # remote to infer from, `gh pr comment` exits 1 with "failed to run git:
+      # fatal: not a git repository" — which is exactly how the first real
+      # teardown run went red *after* successfully deleting the stack.
+      - if: steps.stack.outputs.exists == 'true'
+        name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh pr comment "$PR" --edit-last --create-if-none --body "$(cat <<EOF
+          ### PR Preview
+
+          🗑️ \`$STACK\` is deleting.
+          EOF
+          )"

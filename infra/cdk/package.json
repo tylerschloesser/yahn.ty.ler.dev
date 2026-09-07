@@ -11,6 +11,7 @@
     "destroy": "cdk destroy"
   },
   "dependencies": {
+    "@tylerschloesser/cdk-core": "catalog:",
     "aws-cdk-lib": "catalog:",
     "constructs": "catalog:"
   },

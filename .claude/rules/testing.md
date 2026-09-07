@@ -51,10 +51,10 @@ Split by area rather than by page so a failure names the thing that broke.
   deployed preview with no server of its own. Keep any new spec runnable both ways; anything
   that only works locally belongs in vitest instead.
 - **You rarely need to run the preview target by hand: `pr-preview.yml` already does**, after a
-  gate that waits for `/api/health`. If you do run it locally and get `ERR_NAME_NOT_RESOLVED`,
-  suspect your own resolver before the deploy — one that was asked for `pr-<N>` *before* the
-  record existed caches the NXDOMAIN, and `dig` bypasses that cache so it will disagree.
-  `curl --resolve pr-<N>.yahn.ty.ler.dev:443:<ip>` settles it. See `.claude/rules/cdk.md`.
+  gate that waits for `/api/health`. Previews live at `pr-<N>.preview.yahn.ty.ler.dev` behind a
+  permanent wildcard record, so a stale NXDOMAIN in your resolver is no longer the failure mode;
+  a 404 right after a deploy is the preview router not yet knowing the hostname (a KeyValueStore
+  write reaching the edge). Wait for the gate, or re-run it. See `.claude/rules/cdk.md`.
 - **`pnpm e2e -- e2e/x.spec.ts` does not filter** — the `--` is swallowed and the whole suite
   runs. `pnpm e2e e2e/x.spec.ts` is the form that works.
 - `expect.timeout` is raised above Playwright's default because live HN, not a fixture, is the

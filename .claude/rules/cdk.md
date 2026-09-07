@@ -11,193 +11,253 @@ Everything is in **us-east-1** (CloudFront requires its ACM certificate there) i
 `bin/app.ts` and every CLI call needs `--region us-east-1`. Local access is SSO:
 `aws sso login --profile admin`, then prefix with `AWS_PROFILE=admin`.
 
-> **The account hosts thai.ler.dev's live production stacks** (`ThaiLerDevSiteStack`,
-> `ThaiLerDevGithubOidcStack`), plus four unrelated ones. Never `destroy` or `delete-stack` a
-> name you have not just read back from `aws cloudformation list-stacks`.
+**If the CDK CLI says `Session token not found or invalid` while
+`AWS_PROFILE=admin aws sts get-caller-identity` works**, the AWS CLI is running on cached role
+credentials the JS SDK does not share. Hand the CDK the same credentials:
+`eval "$(aws configure export-credentials --profile admin --format env)"`, then run the `cdk`
+command in that shell. Seen on 2026-09-07 during the migration, on a token with 50 minutes
+left; a fresh `aws sso login` is the other fix.
 
-## The three stacks, and why three
+> **The account hosts thai.ler.dev's live production stacks** (`ThaiLerDevSiteStack`,
+> `ThaiLerDevGithubOidcStack`), cdk-core's own site (`CdkCore*`), and other unrelated production
+> stacks. Never `destroy` or `delete-stack` a name you have not just read back from
+> `aws cloudformation list-stacks`. `cdk destroy` and `delete-stack` are deliberately absent
+> from `.claude/settings.json`.
+
+## The five stacks, and what is the package's
+
+`infra/cdk` is one file, `bin/app.ts`: a single `defineSiteStacks()` call into
+**`@tylerschloesser/cdk-core`** (pinned in the catalog). Stack *knowledge* — domain, zone,
+account, the two Lambdas, the table, the secret — lives here. The *mechanism* — the
+distributions, the preview router, OAC, the deploy role, the sweeper — is the package's, and so
+are its hard-won rules: cdk-core's `.claude/rules/cdk.md`, `cloudfront-origins.md`,
+`streaming-and-kvs.md` and `workflows.md`. **Do not re-implement what the package handles**: the
+`lambda:InvokeFunction`-alongside-`InvokeFunctionUrl` grant, `ALL_VIEWER_EXCEPT_HOST_HEADER`,
+the SPA fallback as a CloudFront Function on the default behavior only, the API living inside
+the site stack, and the asymmetric-`prune` `BucketDeployment` pair are all inside `Site` now.
+Each of them cost a debugging session once; the way to keep that paid is to not write a second
+copy.
 
 | Stack | Deployed by | Holds |
 | --- | --- | --- |
-| `YahnGithubOidcStack` | **you, locally, once** | the `yahn-ty-ler-dev-github-deploy` role |
-| `YahnSharedStack` | `deploy.yml` (and you) | one wildcard certificate |
-| `YahnAppStack-{prod,pr-N}` | `deploy.yml` / `pr-preview.yml` | bucket, Lambda, CloudFront, DNS |
+| `YahnShared` | `deploy.yml`, and by hand first | the one ACM certificate, SANs `[yahn.ty.ler.dev, *.preview.yahn.ty.ler.dev]` |
+| `YahnPreview` | `deploy.yml` (rarely changes) | preview bucket, KeyValueStore, router function, the preview distribution, wildcard DNS, SSM params |
+| `YahnSite` | `deploy.yml` on `main` | prod bucket, distribution, apex DNS, **both Lambdas, the `EnrichTable`, the log groups** |
+| `Yahn-pr-<n>` | `pr-preview.yml` per PR | that PR's two Lambdas + a `PreviewDeployment` (assets under `pr-<n>/`, one KVS key) |
+| `YahnGithubOidc` | **you, locally, once** | the `yahn-github-deploy` role; its ARN is the `AWS_DEPLOY_ROLE_ARN` repo variable |
 
-- **`YahnGithubOidcStack` never deploys from CI** — it grants CI the trust CI would need to
-  deploy it. No workflow names it, and a grep proving that is part of the workflows' own check.
-- **It imports the OIDC provider, never creates one.** One provider per issuer per account, and
-  `ThaiLerDevGithubOidcStack` already made it. `new iam.OpenIdConnectProvider(...)` here is the
-  single most likely first-deploy failure.
-- Its trust carries **four** `sub` values: the legacy and immutable forms of both
-  `ref:refs/heads/main` and `pull_request`. Which form GitHub emits is a property of the repo,
-  not of the policy, so both stay. Both paths are proven — `deploy.yml` and `pr-preview.yml` have
-  each assumed the role.
-- **`YahnSharedStack` exists so previews never wait on certificate issuance** — 160s to issue,
-  measured, against a preview that is six minutes end to end.
-- **The certificate ARN is hard-coded in `bin/app.ts`.** An `Fn::ImportValue` would couple every
-  preview to the shared stack and block deleting a preview while the export is in use; SSM would
-  put an untested dynamic reference inside CloudFront's `ViewerCertificate`. Recreating the
-  certificate is a one-line edit either way. `bin/app.ts` says this at the constant.
-- **Preview stacks are selected by CDK context**: `cdk deploy YahnAppStack-pr-7 -c pr=7`. Without
-  `-c pr=`, `cdk list` shows exactly the three permanent stacks. `bin/app.ts` rejects a
-  non-numeric `pr`, so the stack name cannot be forged from a context value.
+- **`YahnGithubOidc` never deploys from CI** — it grants CI the trust CI would need to deploy it.
+  No workflow names it. **It imports the account's OIDC provider, never creates one**; the
+  provider is owned by `ThaiLerDevGithubOidcStack`.
+- **Preview stacks are selected by CDK context**: `cdk deploy Yahn-pr-7 --exclusively -c pr=7`.
+  Without `-c pr=`, `cdk list` shows exactly the four permanent stacks. `defineSiteStacks`
+  rejects a non-numeric `pr`, so the stack name cannot be forged from a context value, and the
+  sweeper's anchored `^Yahn-pr-[0-9]+$` depends on that.
+- **A PR stack reads `YahnPreview`'s SSM parameters, not CloudFormation exports**, which is what
+  lets it deploy with `--exclusively` and be deleted while the shared stacks stay put. The
+  certificate is the one construct reference that crosses stacks (`YahnShared` → the other two);
+  there is no hard-coded certificate ARN any more.
+- **The `functions` factory gets exactly one prod-versus-preview signal:**
+  `Stack.of(scope).stackName === 'YahnSite'`. `defineSiteStacks` calls the factory once for
+  `YahnSite` and once per `Yahn-pr-<n>`, and the stack name is the only thing that differs. It
+  decides the `EnrichTable`'s removal policy (RETAIN in prod, where summaries cost real money to
+  regenerate; DESTROY in a preview, which the sweeper deletes on a cron) and the log groups'
+  retention and policy (two years + RETAIN, one week + DESTROY).
+- **Log groups are explicit and stack-owned here**, unlike the package's own functions. That
+  means a PR stack's delete takes its groups with it, and it means their names are
+  `YahnSite-ApiLogs…`, not `/aws/lambda/…` — so `cdk-core sweep`'s log-group step, which matches
+  `^/aws/lambda/Yahn-pr-`, has nothing to reclaim for this site and that is correct, not a gap.
+  Yahn's old stacks did leak twenty `/aws/lambda/YahnAppStack-*` groups; the new shape cannot.
+
+## `cdk.context.json` is committed, and it can go stale
+
+`YahnGithubOidc` scopes the role's KVS and S3 grants to `YahnPreview`'s KeyValueStore ARN and
+bucket name, read with `ssm.StringParameter.valueFromLookup` because a dynamic reference cannot
+appear inside an IAM resource ARN. Lookups are cached in `infra/cdk/cdk.context.json`, which is
+therefore **committed**, and which is why `cdk synth` of any stack works with no credentials: the
+CDK CLI resolves missing context for the whole app before selecting stacks, so without the file
+even `synth YahnShared` would ask for AWS.
+
+**If `YahnPreview` is ever recreated, those two values change and the file is wrong** — the role
+ends up scoped to a dead ARN and the sweeper starts failing with `AccessDenied`. Delete the two
+`ssm:…/preview/{kvsArn,bucketName}` entries, run `AWS_PROFILE=admin pnpm --filter @yahn/cdk exec cdk synth`,
+commit the result, and redeploy `YahnGithubOidc` by hand.
+
+## The certificate's validation record is shared, and deleting the old stack may take it
+
+ACM validates a domain and its wildcard with **one** CNAME, `_<hash>.yahn.ty.ler.dev`. The old
+`YahnSharedStack` certificate (`yahn.ty.ler.dev` + `*.yahn.ty.ler.dev`) and the new `YahnShared`
+one (`yahn.ty.ler.dev` + `*.preview.yahn.ty.ler.dev`) both need that record for the apex name,
+and CloudFormation created it under the *old* stack. Deleting the old stack can remove it, and
+the new certificate then fails to **auto-renew in 13 months with no error anywhere** — ACM only
+reports it when renewal is already overdue.
+
+After any deletion of a certificate stack for this domain, re-check:
+
+```
+aws acm describe-certificate --region us-east-1 --certificate-arn <new cert> \
+  --query 'Certificate.DomainValidationOptions[].ResourceRecord'
+aws route53 list-resource-record-sets --hosted-zone-id Z038502736IM0QLQT7VFN \
+  --query "ResourceRecordSets[?Type=='CNAME' && contains(Name, 'yahn')]"
+```
+
+Every `ResourceRecord` the first command prints must appear in the second. If one is missing,
+recreate it by hand from the `Name`/`Value` pair; the certificate reports `SUCCESS` for that
+domain again within minutes.
 
 ## Conventions
 
-- ESM + `nodenext`: **relative imports here carry `.js` extensions** even though the sources are
-  `.ts`, because the app runs through `tsx`. The **one** package in the repo that does.
-- `AppStack` reads `apps/web/dist` and throws if it is missing, so **`pnpm build` runs before any
-  `synth`, `deploy` or `destroy`** — including `pr-teardown.yml`'s destroy, which synthesizes the
-  app like any other CDK command.
+- **`pnpm build` runs before any `synth`, `deploy` or `destroy`.** `Site` and
+  `PreviewDeployment` read `apps/web/dist` and throw without it, and `PreviewSite` reads the
+  package's bundled handlers from `node_modules/@tylerschloesser/cdk-core/dist/handlers/`.
+  `pr-teardown.yml` is the exception because it never synthesizes: it is a raw `delete-stack`.
+- `cdk.json` is two keys (`app`, `output`) and nothing else. The stacks are new, so no feature
+  flag is load-bearing for template compatibility; the reference site ships the same file.
+- **Node 24 and `NODEJS_24_X` stay.** The package pins only its own custom-resource handlers to
+  22; a consumer's Lambdas are the consumer's. Bundling targets `node24`, `@aws-sdk/*` is
+  external because the runtime ships it, and `@yahn/hn` / `@yahn/schema` are workspace *source*
+  consumed through `exports` maps — esbuild must bundle them, so never add them to
+  `externalModules`, and no `depsLockFilePath`.
 - `esbuild` is a **root** devDependency, not this package's: `NodejsFunction` runs the bundler
   from the workspace root where the lockfile is. Without it CDK silently falls back to Docker.
-- `apps/api/src/lambda.ts` imports `@yahn/hn` and `@yahn/schema` as workspace **source** through
-  their `exports` maps. esbuild must bundle them: never add them to `externalModules`, and no
-  `depsLockFilePath` — `NodejsFunction` finds the root lockfile on its own.
+- `bin/app.ts` has no relative imports, so the old ".js extensions on relative imports" rule has
+  nothing left to apply to. If a second file ever appears here, the app runs through `tsx` under
+  `nodenext` and that rule returns.
 
-## Five CloudFront gotchas, each of which cost thai.ler.dev a debugging session
+## Caching — the deliberate divergence from thai, now expressed through the package
 
-1. **`lambda:InvokeFunction` must be granted alongside `lambda:InvokeFunctionUrl`.** Lambda began
-   requiring both on function URLs around Oct 2025; CDK's `withOriginAccessControl` still grants
-   only the latter (aws/aws-cdk#35872), so `app-stack.ts` adds the second explicitly. Symptom:
-   every request 403s and **nothing appears in the function's logs**, because the auth layer
-   rejects it before invocation.
-2. **The origin request policy must exclude `host` and only `host`**
-   (`ALL_VIEWER_EXCEPT_HOST_HEADER`). The deny list applies to the *outbound* headers, which by
-   then include the `Authorization` header OAC just added — denying `authorization` strips
-   CloudFront's own signature. (This is also why a future viewer token travels in `x-id-token`.)
-3. **SPA fallback is a CloudFront Function on the default behavior**, not distribution-wide
-   `errorResponses`. Custom error responses apply to *every* behavior, so a 404 from `/api/*`
-   would come back as the HTML shell with status 200. The function only rewrites URIs containing
-   no `.`, so a missing asset still fails rather than silently returning the shell — but
-   **measured, it fails 403, not 404**: an OAC bucket policy grants `s3:GetObject` and not
-   `s3:ListBucket`, and without `ListBucket` S3 answers a missing key `AccessDenied`. The
-   property that matters holds; the status code inherited from thai's rule file did not.
-4. **The API lives inside the app stack, not its own.** `FunctionUrlOrigin.withOriginAccessControl`
-   adds a resource policy scoped to the distribution's ARN, so splitting them is a cycle.
+thai's `/api/*` is `CACHING_DISABLED`, correct for a per-user sync API and wrong here. Ours is
+`CachePolicies.originDecides` — `minTtl 0 / defaultTtl 0 / maxTtl 300s`, query strings `all`,
+no headers, no cookies, brotli + gzip — the policy the package carried over from this repo.
+**`defaultTtl: 0` is what makes CloudFront honor the origin's own `Cache-Control`**; the origin
+is the authority (`.claude/rules/api.md`), and `maxTtl` is the ceiling on one that misbehaves.
 
-### 5. A POST **with a body** through OAC needs `x-amz-content-sha256` from the viewer
+- It is passed as a **factory**, `cachePolicy: (scope) => CachePolicies.originDecides(scope)`,
+  because `backends` is a static record built before any stack exists. That factory form is
+  cdk-core 0.1.2's, added for this migration; `Site` calls it once per backend with itself as
+  scope.
+- **Previews ignore it and are always `CACHING_DISABLED`** — one distribution serves every open
+  PR and the router cannot vary the cache key by host. So a preview never proves an edge-caching
+  claim; measure `x-cache` on prod only.
+- **`compress: true` on `/api/*` goes through `behaviorOverrides`**, because the package
+  hard-codes `compress: false` for every backend. A 718 KB item JSON wants brotli, and the
+  policy already keys on `Accept-Encoding`. The streaming behavior keeps the default `false`,
+  measured below.
+- **`behaviorOverrides` reaches the preview distribution too** — the package has no
+  per-distribution override, so `YahnPreview`'s `/api/*` also synthesizes `Compress: true`.
+  That is a no-op there, not a leak: CloudFront compresses only when the cache policy enables
+  `Accept-Encoding` normalization, and `CACHING_DISABLED` does not. Re-check with a preview
+  `/api/*` response (no `content-encoding`) against prod's (`br`); if a preview ever compresses,
+  this sentence is wrong and the override needs a prod-only home.
 
-thai's fifth gotcha, predicted here for Epoch 4 and **reproduced against `pr-7` on 2026-09-05**:
+## `compress` on a streaming behavior: measured, and it is a no-op
 
-| Request through the enrichment behavior | Result |
+Measured on the old `pr-7` with two behaviors over the same origin, one `compress: true` and one
+`compress: false` (the twin behavior was temporary; recreate it via `siteOverrides.additionalBehaviors`
+to re-check):
+
+- Compression **never happened at all**. Every response came back with no `content-encoding`,
+  with `Accept-Encoding: gzip, deflate, br` on the viewer request. CloudFront does not compress
+  `text/event-stream`.
+- It did **not** buffer. Events arrived 500ms apart under both settings.
+- It costs nothing measurable: 30 interleaved pairs, alternating which variant went first,
+  median TTFB 0.212s (off) vs 0.214s (on), paired difference **+0.003s median**, `on` slower in
+  17 of 30 — a coin flip.
+
+**The first version of this measurement said otherwise, and it was wrong.** Twelve pairs with
+`off` always sampled first read as a 2.4x regression; alternating the order erased it. *Interleave,
+and randomize order, or you are measuring your harness.* `compress: false` stays because it
+says what is meant, not because it was shown to be faster.
+
+## Streaming through CloudFront: it works, and here is the shape that works
+
+`hono/aws-lambda`'s **`streamHandle`** → a function URL with `invokeMode: RESPONSE_STREAM`
+(the package adds it from `streaming: true`) → a `CACHING_DISABLED` behavior on `/events/*`.
+First byte at 0.21s, events at their origin cadence, locally and through the edge. Three things
+about that chain are load-bearing:
+
+- **`RESPONSE_STREAM` is fixed when the function URL is created.** A buffered URL cannot be
+  promoted; this is the whole reason enrichment is a second Lambda rather than a route.
+- **The origin `readTimeout` is the real deadline, not the Lambda timeout.** The package sets 60s
+  for a streaming backend, which is what CloudFront waits for the first byte *and* between
+  packets. Anything that waits on a model must emit something — the stream sends `meta` before
+  any model work and keepalive comments every 15s for exactly this.
+- **The enrichment function is 512MB on its own terms**, not by inheritance: it spends most of
+  its wall clock blocked on a model call, and its 5-minute timeout is an outer bound on a stream
+  still making progress, not the SLA.
+- **The two path patterns are a contract.** `/api/*` and `/events/*` are shared by `Site`,
+  `PreviewSite`, `apps/web`'s fetches and Vite's proxy, and they must not overlap: cdk-core's
+  preview router refuses one pattern that is a prefix of another, because a CloudFront Function
+  cannot change which behavior was selected. That is why enrichment moved from `/api/v1/enrich`
+  to its own root.
+
+### A POST **with a body** through OAC needs `x-amz-content-sha256` from the viewer
+
+Reproduced against the old `pr-7` on 2026-09-05:
+
+| Request through the streaming behavior | Result |
 | --- | --- |
 | `GET` | 200, streams |
 | `POST` with an empty body, no extra header | 200, streams |
 | `POST` with a body, no `x-amz-content-sha256` | **403 `SignatureDoesNotMatch`** |
 | `POST` with a body **and** `x-amz-content-sha256: <sha256 of body>` | 200, streams |
 
-Origin access control signs the origin request with SigV4, and SigV4 covers a hash of the
-payload that CloudFront cannot compute for you — so the *viewer* has to supply it. That is a
-real burden on every client (`SubtleCrypto` in a browser) and it rules out `EventSource`, which
-only issues GETs.
-
-**So the enrichment endpoint is a `GET`.** Everything it needs is an item id, which fits in the
-path, so the body bought nothing and would have cost every caller a payload hash. `.claude/rules/api.md`
-reserved the prefix as a `POST` under the read API's root; that reservation was about the
-*prefix*, and the method was decided by this measurement. The prefix has since moved to its own
-root, `/events/v1/enrich/**`, so that the streaming behavior's pattern (`/events/*`) is not a
-prefix of the read one's (`/api/*`) — `api.md` says why. `ALLOW_ALL` stays on the behavior so the answer stays
-re-testable without a redeploy.
-
-## `compress` on a streaming behavior: measured, and it is a no-op
-
-The plan flagged `compress: true` as "probably wrong — gzip wants a whole body and buffering is
-what streaming must avoid", explicitly as a hypothesis. **It is not what happens.** Measured on
-`pr-7` with two behaviors over the same origin, one `compress: true` and one `compress: false`
-(the second behavior was temporary and has been deleted — recreate it to re-check):
-
-- Compression **never happened at all**. Every response came back with no `content-encoding`,
-  with `Accept-Encoding: gzip, deflate, br` on the viewer request. CloudFront does not compress
-  `text/event-stream`.
-- It did **not** buffer. Events arrived 500ms apart under both settings.
-- It costs nothing measurable. 30 interleaved pairs, alternating which variant went first:
-  median TTFB 0.212s (compress off) vs 0.214s (on), paired difference **+0.003s median**,
-  −0.073s to +0.687s, with `on` slower in 17 of 30 pairs — a coin flip.
-
-**The first version of this measurement said otherwise, and it was wrong.** Twelve pairs with
-`off` always sampled first produced medians of 0.232s vs 0.555s, which reads as a 2.4x
-regression. Alternating the order erased it: the gap was the position in the pair, not the
-setting. This is Epoch 3's lesson arriving a second time — *interleave, and randomize order, or
-you are measuring your harness.*
-
-`compress: false` stays on the behavior anyway, because it says what is meant — these responses
-are not compressible — not because it was shown to be faster.
-
-## Streaming through CloudFront: it works, and here is the shape that works
-
-Proven end to end on `pr-7` before any of Epoch 4 was built on it: `hono/aws-lambda`'s
-**`streamHandle`** → a function URL with `invokeMode: RESPONSE_STREAM` → a `CACHING_DISABLED`
-behavior. First byte at 0.21s, events arriving incrementally at their origin cadence, both
-locally and through the edge. No hand-rolled `awslambda.streamifyResponse`.
-
-Three things about that chain are load-bearing:
-
-- **`RESPONSE_STREAM` is fixed when the function URL is created.** A buffered URL cannot be
-  promoted; it has to be replaced. This is the whole reason enrichment is a second Lambda rather
-  than a route on the read one.
-- **`readTimeout` on the origin is the real deadline, not the Lambda timeout.** It is what
-  CloudFront waits for the first byte *and* between subsequent packets, and 60s is the ceiling
-  without a quota increase. A producer that goes quiet longer than that is cut off at the edge
-  while the Lambda happily keeps running. Anything that waits on a model must emit something —
-  the enrichment stream sends a `meta` event before any model work starts for exactly this.
-- **The enrichment function does not inherit the read function's 512MB reasoning.** Cost is
-  memory x duration, and this one spends most of its wall clock blocked on a model call, so
-  buying vCPU for the blocked part is pure waste. It is 512MB on its own terms, not by
-  inheritance, and its 5-minute timeout is an outer bound on a stream still making progress.
-
-## Caching — the deliberate divergence from thai
-
-thai's `/api/*` is `CACHING_DISABLED`, correct for a per-user sync API and wrong here. Ours has a
-custom policy: `minTtl 0 / defaultTtl 0 / maxTtl 300s`, query strings `all`, no headers, no
-cookies, brotli + gzip. **`defaultTtl: 0` is what makes CloudFront honor the origin's own
-`Cache-Control`** rather than override it, and `maxTtl` is the ceiling on an origin that
-misbehaves. The origin is the authority: feeds send `max-age=30, stale-while-revalidate=300`,
-items `max-age=60`, and **every non-2xx sends `no-store`** — see `.claude/rules/api.md`. That
-last one is load-bearing: without it an HN blip would pin at every edge for 30s and serve stale
-for 300 more.
-
-Two `BucketDeployment`s, and the asymmetry is not optional: assets deploy `prune: true`, then
-HTML `prune: false` with an explicit `addDependency`. `prune: true` on the second would delete
-every hashed asset the first just uploaded. `UNVERSIONED` is just `*.html` — there is no service
-worker here, which is also why nothing goes in `apps/web/public/` that might be edited in place.
+Origin access control signs the origin request with SigV4 over a payload hash CloudFront cannot
+compute, so the *viewer* has to supply it — a real burden on every client, and it rules out
+`EventSource`. **So the enrichment endpoint is a `GET`.** The package's default `ALLOW_ALL` on
+the streaming behavior stays so the answer is re-testable without a redeploy.
 
 ## The preview lifecycle
 
 `pr-preview.yml` (open/synchronize/reopen) → `pr-teardown.yml` (close) → `cleanup.yml` (daily).
+Previews answer at **`https://pr-<n>.preview.yahn.ty.ler.dev`**: one shared distribution whose
+router reads a KeyValueStore keyed by hostname, rewrites assets to `pr-<n>/` in the shared
+bucket, and re-points `/api/*` and `/events/*` at that PR's Lambda URLs per request.
 
-Measured on the first real run: create ~6 min, destroy ~4 min. The CloudFront distribution is
-~4 of the 6 and is the only resource still pending at the end, so a *repeat* deploy to an
-existing preview is far quicker — only its first creation is slow.
+- **A preview deploy is one stack of two Lambdas plus asset upload and a KVS write**, not a
+  CloudFront distribution create. cdk-core measures ~95 s on its own site against the old
+  clone-per-PR's ~6 min; the sticky comment on every PR reports `deploy N s · push → comment N s`,
+  so the number for this site is on the migration PR and every PR after it.
+- **`cancel-in-progress: false` on everything that touches CloudFormation is load-bearing.**
+  Cancelling the job does not cancel the deploy it started; the next push would find the stack
+  `UPDATE_IN_PROGRESS`. `pr-teardown.yml` shares the *same* concurrency group so a teardown can
+  never race a deploy for the same PR. Only `ci.yml` cancels.
+- **Both deploy paths poll `/api/health` before Playwright**, but for a different reason than
+  before: the wildcard DNS record is permanent, so NXDOMAIN is no longer the failure mode. KVS
+  writes reach the edge on no published SLA, so `CREATE_COMPLETE` does not mean the router
+  knows the hostname yet. A local Playwright failure right after a deploy is the router, not
+  your resolver.
+- **`pr-teardown.yml` has no checkout, no build and no CDK**: a raw `delete-stack`, no wait, so a
+  PR whose branch no longer builds still tears down. The stack's own `autoDeleteObjects` helper
+  and its `KvsRoute` custom resource remove the assets and the hostname as part of the delete.
+  `gh pr comment` needs `GH_REPO` because there is no git remote to infer from — do not "fix"
+  that by adding a checkout.
+- Fork PRs get no preview, and that is correct: GitHub will not grant `id-token: write` to a
+  fork PR. Both PR workflows carry the same explicit guard.
 
-- **`cancel-in-progress: false` on `pr-preview.yml` is load-bearing.** Cancelling the job does
-  not cancel the CloudFormation deploy it started; the next push would then find the stack in
-  `UPDATE_IN_PROGRESS` and fail. `pr-teardown.yml` shares the *same* concurrency group so a
-  teardown can never race a deploy for the same PR. Only `ci.yml` cancels — it leaves nothing
-  behind server-side.
-- **Both deploy paths poll `/api/health` before Playwright.** CloudFormation reports the stack
-  complete before the new record has propagated, and Playwright burns all its retries on
-  NXDOMAIN in about two seconds. A CI runner starts with a cold resolver so the gate is enough
-  there; **your laptop may not**, because a resolver that was asked for `pr-<N>` before the
-  record existed caches the NXDOMAIN. `dig` bypasses that cache and will disagree with `curl`
-  and Playwright. Confirm with `curl --resolve pr-<N>.yahn.ty.ler.dev:443:<ip>` before believing
-  a local failure is the preview's fault.
-- **`cleanup.yml` is the only scheduled thing that deletes, and three guards stand between its
-  cron and the rest of the account.** Two are in the workflow: the `YahnAppStack-pr-` prefix and
-  an anchored `^[0-9]+$` on what follows it, which together reject `YahnAppStack-prod` (no
-  trailing hyphen) *and* `YahnAppStack-pr-x`. The third is IAM, and it is the one that matters
-  because it survives a rewrite of that shell loop: the deploy role's
-  `cloudformation:DeleteStack` is scoped to `stack/YahnAppStack-pr-*`. Re-check with
-  `aws iam simulate-principal-policy` rather than trusting this line — `pr-1` allowed, every
-  other stack `implicitDeny`. **None may be loosened.**
-- **That scope is also why the deploy role is not only `sts:AssumeRole`.** `cdk deploy`/`destroy`
-  assume the CDK bootstrap roles and need nothing more, but `cleanup.yml` calls CloudFormation
-  *directly as this role* — its stack list comes from AWS, not from the app — so the role also
-  carries `ListStacks` (on `*`; the action takes no resource-level permissions). Its first run
-  failed `AccessDenied ... cloudformation:ListStacks` for exactly this. Widening it means a
-  **local** hand deploy of `YahnGithubOidcStack`, never a workflow.
-- Fork PRs get no preview, and that is correct: GitHub will not grant `id-token: write` to a fork
-  PR, so the deploy could not authenticate. Both PR workflows carry the same explicit guard.
+## `cleanup.yml` is the only scheduled thing that deletes, and three guards stand between its cron and the account
+
+It runs `cdk-core sweep --site yahn.ty.ler.dev --stack-prefix Yahn --repo tylerschloesser/yahn.ty.ler.dev`,
+which reconciles four things against the list of open PRs: `Yahn-pr-<n>` stacks, KVS keys,
+`pr-<n>/` prefixes in the preview bucket, and `/aws/lambda/Yahn-pr-*` log groups.
+
+1. **The sweeper's own anchored `^Yahn-pr-[0-9]+$`**, which rejects `YahnSite` and `Yahn-pr-x`.
+2. **IAM, and this is the one that survives a rewrite of the sweeper or a workflow**: the deploy
+   role's `cloudformation:DeleteStack` is scoped to `stack/Yahn-pr-*` and its
+   `logs:DeleteLogGroup` to `log-group:/aws/lambda/Yahn-pr-*`; `ListStacks` and
+   `DescribeLogGroups` are `*` because those actions take no resource. It is `GithubDeployRole`'s
+   policy inside the package, so it is not yours to loosen, but it is yours to **re-check with
+   `aws iam simulate-principal-policy`** whenever the package version changes: `Yahn-pr-1`
+   allowed, `YahnSite`, `ThaiLerDevSiteStack` and `CDKToolkit` `implicitDeny`. Widening it means
+   a **local** hand deploy of `YahnGithubOidc`, never a workflow.
+3. **Locally, only the dry run is allowlisted**, as the full literal command in
+   `.claude/settings.json`. It exits non-zero if it *would* delete anything, so a green dry run
+   is a positive statement that the account is clean:
+   `GH_TOKEN=$(gh auth token) AWS_PROFILE=admin pnpm --filter @yahn/cdk exec cdk-core sweep --site yahn.ty.ler.dev --stack-prefix Yahn --repo tylerschloesser/yahn.ty.ler.dev --dry-run`.
+
+The deploy role trusts `ref:refs/heads/main` and `pull_request` and nothing else, in both the
+legacy and the immutable `sub` forms — so a `workflow_dispatch` from another branch is refused
+at `AssumeRoleWithWebIdentity`. Test a workflow change through a PR.
 
 ## claude.yml
 
@@ -215,8 +275,7 @@ Three things its first run taught, all now fixed here:
   run obeys the intersection. It started with lint/typecheck/build only, so the run could not
   execute `pnpm test` or `pnpm e2e` and shipped a correct fix it had no way to verify. It now
   carries `pnpm verify`, `pnpm e2e`, and the `gh issue`/`gh pr` reads the `file-issue` skill
-  needs — without those the run could not even file a ticket about being unable to test, and had
-  to leave the finding in a comment. **If you add a check to `pnpm verify`, check this line too.**
+  needs. **If you add a check to `pnpm verify`, check this line too.**
 - **`pnpm e2e` needs `playwright install --with-deps chromium`,** which `ci.yml` does and this
   workflow did not. An allowlist entry without the browser is a false promise.
 - **Every run costs two workflow runs.** The action posts its own "Claude Code is working…"

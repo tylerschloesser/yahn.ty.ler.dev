@@ -44,6 +44,8 @@ catalog:
   aws-cdk-lib: ^2.268.0
   aws-cdk: ^2.1140.0
   constructs: ^10.8.1
+  # infra (cdk-core migration)
+  '@tylerschloesser/cdk-core': ^0.1.2
   # shared
   typescript: ~6.0.3
   zod: ^4.5.4
@@ -67,3 +69,4 @@ minimumReleaseAgeExclude:
   - hono@4.13.7
   - playwright-core@1.63.0
   - playwright@1.63.0
+  - '@tylerschloesser/cdk-core@0.1.2'

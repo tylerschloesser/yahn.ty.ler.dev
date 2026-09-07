@@ -98,18 +98,22 @@ requests.
 
 Live at **https://yahn.ty.ler.dev**. One CloudFront distribution serves the static app from S3
 and `/api/*` from a Lambda function URL, so the API is same-origin: no CORS, no preflight, and
-cookies will work when auth lands.
+cookies will work when auth lands. The infrastructure is `infra/cdk/bin/app.ts`, one
+`defineSiteStacks()` call into `@tylerschloesser/cdk-core`, the package extracted from this site
+and thai.ler.dev.
 
 `/api/*` is cached at the edge, which is where the Lambda earns its keep — a repeat front page
 is one CloudFront hit instead of 31 requests to Hacker News, measured at 1.23s cold against
 0.03s warm. The origin decides: feeds send `max-age=30, stale-while-revalidate=300`, items
 `max-age=60`, and every non-2xx sends `no-store` so an upstream blip is never pinned at an edge.
 
-Every pull request from this repo gets a **full preview clone** — its own bucket, Lambda,
-distribution and hostname at `https://pr-<N>.yahn.ty.ler.dev` — deployed on push, tested with
-the same Playwright spec, commented on the PR, and destroyed when the PR closes. They share one
-wildcard certificate, because issuing a certificate is the slow part. `.claude/rules/cdk.md` has
-the details and the things that must not be loosened.
+Every pull request from this repo gets a preview at **https://pr-\<N>.preview.yahn.ty.ler.dev**.
+It is not a clone of production but one shared preview distribution (from
+`@tylerschloesser/cdk-core`) that routes by hostname to that PR's own Lambdas and its own slice
+of a shared bucket, so a preview deploys in well under two minutes rather than the six a full
+stack clone took. It is tested with the same Playwright spec, commented on the PR with its
+timings, and torn down when the PR closes. Prod and previews share one certificate with SANs
+`yahn.ty.ler.dev` and `*.preview.yahn.ty.ler.dev`. `.claude/rules/cdk.md` has the details.
 
 ## Conventions
 

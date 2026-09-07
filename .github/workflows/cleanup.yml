@@ -1,16 +1,17 @@
 # Safety net for a PR teardown that failed, or raced an in-flight deploy.
 #
-# The `YahnAppStack-pr-` prefix, plus the numeric guard on what follows it,
-# is the ONLY thing standing between this cron and every other stack in
-# the account — including production. Both must stay exactly as they are:
-# loosen the prefix match or drop the `^[0-9]+$` check and this job can
-# delete a stack it was never meant to touch.
+# This replaces a hand-written shell sweep over `aws cloudformation
+# list-stacks` with the package's own `cdk-core sweep`, which reconciles
+# stacks, KVS keys, S3 prefixes and log groups against open PRs. A second,
+# divergent implementation here would only drift from the package's, which
+# is the one that is tested. That means this workflow needs the repo checked
+# out and installed (the sweeper is the package's bin, so `infra/cdk` has to
+# resolve it).
 #
-# This does not use CDK: the stack list comes from AWS itself rather than
-# from the app (a stack whose PR already closed has nothing left to
-# synthesize against), and a raw `aws cloudformation delete-stack` needs
-# no checkout, no build and no synth — the stack's own autoDeleteObjects
-# custom resource runs regardless of how the delete was triggered.
+# Nothing here decides which stacks are safe to touch — that is the
+# sweeper's job. The two things standing between this cron and every other
+# stack in the account are the sweeper's own anchored `^Yahn-pr-[0-9]+$`
+# match and the deploy role's IAM scope, and neither lives in this file.
 
 name: Cleanup
 
@@ -28,63 +29,29 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # The package comes prebuilt from npm, so `pnpm install
+      # --frozen-lockfile` alone makes the `cdk-core` bin resolve under
+      # infra/cdk — there is no workspace package to build first.
+      - run: pnpm install --frozen-lockfile
+
       - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
           role-session-name: github-actions-cleanup
 
-      - name: Delete stale PR preview stacks
+      # infra/cdk depends on @tylerschloesser/cdk-core, so its bin resolves
+      # there. GH_TOKEN is needed because the sweeper shells out to
+      # `gh pr view` to decide whether a PR is still open.
+      - run: pnpm --filter @yahn/cdk exec cdk-core sweep --site yahn.ty.ler.dev --stack-prefix Yahn --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          names=$(aws cloudformation list-stacks \
-            --region us-east-1 \
-            --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE ROLLBACK_COMPLETE CREATE_FAILED UPDATE_FAILED DELETE_FAILED \
-            --query "StackSummaries[?starts_with(StackName, 'YahnAppStack-pr-')].StackName" \
-            --output text)
-
-          if [ -z "$names" ]; then
-            echo "No PR preview stacks found."
-            exit 0
-          fi
-
-          for name in $names; do
-            n="${name#YahnAppStack-pr-}"
-
-            if ! [[ "$n" =~ ^[0-9]+$ ]]; then
-              echo "Skipping $name: '$n' is not a bare PR number, refusing to touch it."
-              continue
-            fi
-
-            echo "Checking PR #$n for stack $name"
-
-            state=$(gh pr view "$n" --repo "${{ github.repository }}" --json state --jq .state 2>&1) || {
-              echo "Could not look up PR #$n ($state), leaving $name alone."
-              continue
-            }
-
-            if [ "$state" != "CLOSED" ] && [ "$state" != "MERGED" ]; then
-              echo "PR #$n is $state, leaving $name alone."
-              continue
-            fi
-
-            echo "PR #$n is $state, deleting $name"
-            # One stack that refuses to delete must not stop the sweep: a
-            # DELETE_FAILED stack needs a human, and the others are still owed
-            # a teardown. `failed` is echoed at the end so the run is red.
-            if aws cloudformation delete-stack --region us-east-1 --stack-name "$name" \
-              && aws cloudformation wait stack-delete-complete --region us-east-1 --stack-name "$name"; then
-              echo "Deleted $name"
-            else
-              echo "FAILED to delete $name — needs a look"
-              failed=1
-            fi
-          done
-
-          if [ "${failed:-0}" = "1" ]; then
-            echo "At least one stack could not be deleted."
-            exit 1
-          fi
