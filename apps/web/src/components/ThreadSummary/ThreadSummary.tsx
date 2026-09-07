@@ -26,7 +26,7 @@ type ThreadSummaryProps = {
 }
 
 /**
- * Streams `GET /api/v1/enrich/thread/:id` and renders the markdown summary as
+ * Streams `GET /events/v1/enrich/thread/:id` and renders the markdown summary as
  * it is written.
  *
  * Deliberately **not** a TanStack Query. `.claude/rules/web-ui.md` makes
@@ -49,7 +49,7 @@ export function ThreadSummary({ itemId }: ThreadSummaryProps) {
     setState({ status: 'streaming', text: '', cached: null })
 
     try {
-      const response = await fetch(`/api/v1/enrich/thread/${String(itemId)}`, {
+      const response = await fetch(`/events/v1/enrich/thread/${String(itemId)}`, {
         signal: controller.signal,
       })
       if (!response.ok || !response.body) {

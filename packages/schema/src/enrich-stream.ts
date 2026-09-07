@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { EnrichmentsSchema, EnrichmentInputSchema } from './enrichment.ts'
 
 /**
- * The server-sent-event contract for `GET /api/v1/enrich/thread/:id`.
+ * The server-sent-event contract for `GET /events/v1/enrich/thread/:id`.
  *
  * It lives in the schema package rather than in either app because it is the
  * one place the streaming producer and the streaming consumer can drift, and

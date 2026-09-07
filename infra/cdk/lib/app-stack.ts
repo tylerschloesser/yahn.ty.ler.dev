@@ -229,9 +229,8 @@ function handler(event) {
 
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       additionalBehaviors: {
-        // Ordered before `/api/*`: CloudFront matches the most specific path
-        // pattern, but keeping the pair adjacent and specific-first is what
-        // makes the split legible.
+        // The streaming behavior has its own root, `/events/*`, so neither
+        // this pattern nor `/api/*` is a prefix of the other.
         //
         // `CACHING_DISABLED`, because a stream has nothing to cache and a
         // cached SSE body would be served to the next viewer as a replay.
@@ -246,7 +245,7 @@ function handler(event) {
         // response), it does not buffer either way, and 30 interleaved pairs
         // put the difference at +0.003s median. The plan's hypothesis that
         // gzip would buffer the stream is simply not what happens.
-        '/api/v1/enrich/*': {
+        '/events/*': {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(enrichFnUrl, {
             // The time CloudFront waits for the first origin byte *and* between
             // subsequent packets. 60s is the ceiling without a quota increase,

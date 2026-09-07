@@ -55,12 +55,19 @@ mirrors the split.
 - **Do not mount it into the read app with `app.route()`.** Hono does not carry a sub-app's
   `notFound` and `onError` across a mount, and the read app's error mapping is a contract, not a
   detail. Two ports locally is also simply what production is.
-- **It is `GET /api/v1/enrich/thread/:id`, not POST**, and that is a measured decision rather
+- **It is `GET /events/v1/enrich/thread/:id`, not POST**, and that is a measured decision rather
   than a stylistic one. Under origin access control CloudFront signs the origin request with
   SigV4, whose signature covers a hash of the payload that CloudFront cannot compute — so a POST
   *with a body* 403s unless the viewer itself sends `x-amz-content-sha256`. That is a real cost
   to every client and it rules out `EventSource`. The reservation in this file was for the
   **prefix**; `.claude/rules/cdk.md` has the full result table.
+- **Its root is `/events`, not `/api`, and the split is at the first label on purpose.** A
+  CloudFront behavior is selected by path pattern, and the two backends' patterns must not
+  overlap — a streaming pattern nested under `/api/` is exactly what cdk-core's preview router
+  refuses to render, because a CloudFront Function cannot change which behavior was selected. The
+  pattern `/events/*` is what selects the streaming Lambda in prod and in every preview, so a
+  new streaming route goes under `/events/`, never under `/api/`. Vite's dev proxy mirrors the
+  same two roots.
 - **Failure after the first byte has to be in-band.** A stream that has already sent its status
   line cannot change it, so the contract is: `meta` first, then `delta`s, then exactly one
   terminal `complete` or `error`. A client that sees the stream end without a terminal event

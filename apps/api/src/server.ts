@@ -12,7 +12,7 @@ import { applyLocalDefaults, env } from './env.ts'
  * behind two CloudFront behaviors and that split is what makes streaming
  * possible at all. Mounting the read app into a parent with `app.route()`
  * would also drop its `onError` mapping, and that mapping is a contract — see
- * `.claude/rules/api.md`. Vite's dev proxy sends `/api/v1/enrich` here and
+ * `.claude/rules/api.md`. Vite's dev proxy sends `/events` here and
  * everything else to the read port, mirroring the two behaviors.
  *
  * Neither needs credentials or secrets: both HN APIs are public, and the model

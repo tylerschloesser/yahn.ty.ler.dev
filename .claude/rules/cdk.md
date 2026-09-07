@@ -94,8 +94,10 @@ only issues GETs.
 
 **So the enrichment endpoint is a `GET`.** Everything it needs is an item id, which fits in the
 path, so the body bought nothing and would have cost every caller a payload hash. `.claude/rules/api.md`
-reserved the prefix as `POST /api/v1/enrich/**`; that reservation was about the *prefix*, and
-the method was decided by this measurement. `ALLOW_ALL` stays on the behavior so the answer stays
+reserved the prefix as a `POST` under the read API's root; that reservation was about the
+*prefix*, and the method was decided by this measurement. The prefix has since moved to its own
+root, `/events/v1/enrich/**`, so that the streaming behavior's pattern (`/events/*`) is not a
+prefix of the read one's (`/api/*`) — `api.md` says why. `ALLOW_ALL` stays on the behavior so the answer stays
 re-testable without a redeploy.
 
 ## `compress` on a streaming behavior: measured, and it is a no-op
