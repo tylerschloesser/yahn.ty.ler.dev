@@ -44,12 +44,25 @@ export interface EnrichStore {
 export interface ReadQuery {
   itemId: number
   kind: EnrichmentKind
-  /** The key of the input we would send now. An exact match is always valid. */
-  inputKey: string
+  /**
+   * The key of the input we would send now. An exact match is always valid.
+   * Omitted by the cheap pre-render check below, which has not rendered
+   * anything yet and so cannot know it.
+   */
+  inputKey?: string
   /** Comments in the thread right now, to compare against what was summarized. */
   totalComments: number
-  /** Comments we would send now, so a thinner stored summary is not reused. */
-  comments: number
+  /**
+   * Comments we would send now, so a thinner stored summary is not reused.
+   * Omitted by the cheap pre-render check, which has to answer the coverage
+   * half of the rule without rendering — `strategy`/`budgetChars` stand in
+   * for it instead: two requests with identical selection parameters render
+   * comparable coverage without either one having to render.
+   */
+  comments?: number
+  /** With `budgetChars`, the coverage proxy used when `comments` is omitted. */
+  strategy?: string
+  budgetChars?: number
 }
 
 /**
@@ -87,8 +100,10 @@ function sk(kind: EnrichmentKind, summary: ThreadSummary): string {
  * the rule is stated once and both backends obey it.
  */
 function usable(candidates: ThreadSummary[], query: ReadQuery): ThreadSummary | null {
-  const exact = candidates.find((c) => c.inputKey === query.inputKey)
-  if (exact) return exact
+  if (query.inputKey !== undefined) {
+    const exact = candidates.find((c) => c.inputKey === query.inputKey)
+    if (exact) return exact
+  }
 
   // Newest first. Two conditions, and both are needed.
   for (const candidate of candidates) {
@@ -99,14 +114,26 @@ function usable(candidates: ThreadSummary[], query: ReadQuery): ThreadSummary | 
     // thread that has stopped growing this is always true, which is the case
     // that matters most — that is the permanent cache hit.
     const fresh = query.totalComments <= was * (1 + GROWTH_TOLERANCE)
+    if (!fresh) continue
 
     // And it read at least as much of the thread as we would now. Without
     // this, a summary generated from a deliberately tiny slice would be
     // served to a request asking for the whole thread — measured, and it is
     // exactly what happened the first time this tolerance was written.
-    const deep = candidate.input.comments >= query.comments * (1 - GROWTH_TOLERANCE)
+    //
+    // `query.comments` is only known once a render has already happened. The
+    // cheap pre-render check has no render to compare, so it asks a
+    // different question that needs none: would *this* request select the
+    // same slice as the one that produced the candidate? Same strategy and
+    // same budget on a thread that has not grown past tolerance renders
+    // comparable coverage, without either side rendering.
+    const deep =
+      query.comments !== undefined
+        ? candidate.input.comments >= query.comments * (1 - GROWTH_TOLERANCE)
+        : candidate.input.strategy === query.strategy &&
+          candidate.input.budgetChars === query.budgetChars
 
-    if (fresh && deep) return candidate
+    if (deep) return candidate
   }
   return null
 }

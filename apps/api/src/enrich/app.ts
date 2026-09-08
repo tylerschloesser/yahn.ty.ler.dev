@@ -1,4 +1,4 @@
-import { getItem, NotFoundError, UpstreamError } from '@yahn/hn'
+import { firebase, getItem, NotFoundError, UpstreamError } from '@yahn/hn'
 import {
   ENRICH_EVENT,
   type EnrichmentKind,
@@ -9,7 +9,7 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { SSEStreamingApi } from 'hono/streaming'
 import { getModel } from './model/index.ts'
-import { getStore } from './store.ts'
+import { getStore, type EnrichStore } from './store.ts'
 import { inputKey, renderThread, type SelectionStrategy } from './thread.ts'
 
 /**
@@ -156,10 +156,28 @@ async function run(
   const heartbeat = setInterval(() => void out.ping(), HEARTBEAT_MS)
 
   try {
+    const store = getStore()
+
+    // A cache hit answers from the store alone and needs none of what follows
+    // — no tree fetch, no render. `cheapRead` asks whether one exists using
+    // only a single Firebase `item/:id` fetch; a `null` here means "cannot
+    // tell without rendering," not "no summary exists," so it always falls
+    // through to the render-then-check path below rather than answering miss.
+    const cheapHit = await cheapRead(store, id, strategy, budgetChars)
+    if (cheapHit) {
+      await out.send(ENRICH_EVENT.meta, {
+        itemId: id,
+        cached: true,
+        inputKey: cheapHit.inputKey,
+        input: cheapHit.input,
+      })
+      await complete(out, cheapHit)
+      return
+    }
+
     const item = await getItem(id)
     const rendered = renderThread(item.story, item.comments, { strategy, budgetChars })
     const key = inputKey(rendered.text)
-    const store = getStore()
 
     const cached = await store.read({
       itemId: id,
@@ -176,6 +194,7 @@ async function run(
       chars: rendered.chars,
       inputTokens: cached?.input.inputTokens ?? null,
       outputTokens: cached?.input.outputTokens ?? null,
+      budgetChars: strategy === 'budget' ? budgetChars : undefined,
     }
 
     /**
@@ -224,6 +243,46 @@ async function run(
   } finally {
     clearInterval(heartbeat)
   }
+}
+
+/**
+ * Answers a cache hit without paying for the full comment-tree fetch that
+ * `getItem` above does — up to 1,600+ Firebase requests on the largest
+ * threads, all to learn a `totalComments`/`comments` pair the reuse rule
+ * needs before it can even ask the store.
+ *
+ * `Story.descendants` is HN's own total comment count, from the same single
+ * `item/:id` fetch the slow path makes anyway for the root item — so this
+ * spends one request to learn what the tree walk would otherwise spend
+ * hundreds or thousands to compute. It stands in for `totalComments`
+ * (growth), and `strategy`/`budgetChars` stand in for `comments` (coverage)
+ * per the comment on `usable()` in `store.ts`.
+ *
+ * A `null` return means "cannot tell," never "no summary exists" — missing
+ * or stale `descendants`, or any fetch failure, and the caller falls through
+ * to the render-then-check path, which is unaffected by anything here.
+ */
+async function cheapRead(
+  store: EnrichStore,
+  id: number,
+  strategy: SelectionStrategy,
+  budgetChars: number,
+): Promise<ThreadSummary | null> {
+  let descendants: number | null
+  try {
+    descendants = (await firebase.getItem(id)).descendants ?? null
+  } catch {
+    return null
+  }
+  if (descendants === null) return null
+
+  return store.read({
+    itemId: id,
+    kind: KIND,
+    totalComments: descendants,
+    strategy,
+    budgetChars: strategy === 'budget' ? budgetChars : undefined,
+  })
 }
 
 function complete(out: Writer, threadSummary: ThreadSummary): Promise<void> {
