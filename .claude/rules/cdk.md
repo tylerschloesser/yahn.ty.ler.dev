@@ -170,6 +170,18 @@ have to get right.
   ```
   A PR stack synthesized from a branch whose `bin/app.ts` has **no** `auth` key never reads them,
   so open PRs predating this are unaffected until they rebase.
+- **The edge gate repeats that bootstrap, one layer worse, and it bit on the PR that added it.**
+  With `auth.gate`, a PR stack's backend Lambdas also carry `AUTH_SESSION_SECRET`, a
+  `{{resolve:secretsmanager:yahn.ty.ler.dev/preview-session-secret:…}}` dynamic reference. That
+  secret is created by `YahnPreview`, so before `YahnPreview` is deployed the PR stack fails at
+  **`ApiFn` creation** with `Secrets Manager can't find the specified secret`
+  (`ResourceNotFoundException`) and rolls the whole stack back. The message names the secret but
+  not the stack that owes it, and `cdk synth` is perfectly happy — same shape as the SSM case
+  above, same fix, same command. `pr-preview.yml` deploys only `Yahn-pr-<n> --exclusively`, and
+  `deploy.yml` (on `main`) is the only thing that deploys `YahnPreview`, so **the PR that
+  introduces the gate cannot get a working preview until `YahnPreview` is deployed by hand from
+  that branch.** Deploying it also puts the gate on the *shared* preview distribution, so every
+  other open PR's preview becomes gated at the same moment — check `gh pr list` first.
 - **`YahnGithubOidc` needed no redeploy for this** — `cdk diff` reported *no differences*, and its
   policy already grants `secretsmanager:GetSecretValue` on
   `yahn.ty.ler.dev/preview-machine-user-*`, which is the only IAM permission the machine-login
