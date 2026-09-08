@@ -93,6 +93,21 @@ jobs:
           # Overriding it takes both halves — the tool and the instruction —
           # and the append runs *after* the built-in prompt, which is why it
           # wins.
+          #
+          # `gh pr checks`, `gh run view` and `sleep` are what let the run wait
+          # for the CI it just started, and it could not before: `gh pr create`
+          # was the last thing it did, so PR #22 was reported as finished eleven
+          # seconds before its own preview run began — and that run failed.
+          # Ordering makes the wait unavoidable rather than optional: the checks
+          # do not exist until the PR does, so nothing earlier in the run can
+          # cover them. `--watch` blocks, which is why no polling loop is needed
+          # and why the one `sleep` is only for the gap before the checks
+          # register at all.
+          #
+          # This is the one change here that costs real runner minutes: the job
+          # now idles through `pr-preview.yml`, which is ~6-7 min of deploy plus
+          # e2e. That is the price of a run that cannot say "done" over a red
+          # PR, and it is worth it.
           claude_args: |
-            --allowedTools "Bash(pnpm verify),Bash(pnpm lint),Bash(pnpm lint:fix),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm build),Bash(pnpm e2e),Bash(pnpm e2e:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh label list:*)"
-            --append-system-prompt "This repository wants you to open the pull request yourself, which overrides the instruction above to provide a manual compare URL. Whenever you have pushed a branch with changes, run: gh pr create --base main --head THE_BRANCH_YOU_PUSHED --title ... --body ... . Write the body as Summary and Test plan sections, state what you ran and what you could not run, and include the line Fixes #N when the work closes an issue. Then report the URL of the PR you created rather than a compare link. If gh pr create fails, fall back to the compare link and say plainly that it failed and why."
+            --allowedTools "Bash(pnpm verify),Bash(pnpm lint),Bash(pnpm lint:fix),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm build),Bash(pnpm e2e),Bash(pnpm e2e:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh pr checks:*),Bash(gh run view:*),Bash(gh label list:*),Bash(sleep:*)"
+            --append-system-prompt "This repository wants you to open the pull request yourself, which overrides the instruction above to provide a manual compare URL. Whenever you have pushed a branch with changes, run: gh pr create --base main --head THE_BRANCH_YOU_PUSHED --title ... --body ... . Write the body as Summary and Test plan sections, state what you ran and what you could not run, and include the line Fixes #N when the work closes an issue. Then report the URL of the PR you created rather than a compare link. If gh pr create fails, fall back to the compare link and say plainly that it failed and why. After the PR exists, wait for its checks rather than ending the run: sleep 60 so the checks register, then run gh pr checks THE_PR_NUMBER --watch --interval 30 --fail-fast=false, which blocks until every check has finished. If that command reports that no checks exist yet, sleep 60 and run it once more before giving up on waiting. When a check fails, read its log with gh run view --job JOB_ID --log-failed, and say in your comment which check failed and what the failing output was. Do not describe a red or still-running PR as done, and do not claim CI is green unless gh pr checks actually said so."

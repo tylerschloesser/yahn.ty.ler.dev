@@ -84,7 +84,7 @@ an agent reading it literally will "fix" working code.
 - Budgets: this file under 100 lines, each rule under about 120. **`cdk.md` is exempt** — it is
   the only rule covering two `paths` globs (`infra/cdk/**` and `.github/workflows/**`) whose
   contents cross-reference constantly, and Epoch 3 raised its ceiling twice in one session before
-  admitting the number was the wrong control. It is ~190 and that is fine. **The real test is
+  admitting the number was the wrong control. It is ~425 and that is fine. **The real test is
   whether a reader can find the one paragraph they need**, which headings decide, not length.
   Split it when a workflow section stops referring to stack internals — until then, a session
   editing `cleanup.yml` needs the IAM scope and stack naming that make it safe, and a split would

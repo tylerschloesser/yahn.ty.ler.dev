@@ -363,8 +363,9 @@ Three things its first run taught, all now fixed here:
 - **`--allowedTools` is a second, narrower allowlist than `.claude/settings.json`,** and the
   run obeys the intersection. It started with lint/typecheck/build only, so the run could not
   execute `pnpm test` or `pnpm e2e` and shipped a correct fix it had no way to verify. It now
-  carries `pnpm verify`, `pnpm e2e`, and the `gh issue`/`gh pr` reads the `file-issue` skill
-  needs. **If you add a check to `pnpm verify`, check this line too.**
+  carries `pnpm verify`, `pnpm e2e`, the `gh issue`/`gh pr` reads the `file-issue` skill needs,
+  and `gh pr checks`/`gh run view`/`sleep` for the wait below. **If you add a check to
+  `pnpm verify`, check this line too.**
 - **`pnpm e2e` needs `playwright install --with-deps chromium`,** which `ci.yml` does and this
   workflow did not. An allowlist entry without the browser is a false promise.
 - **Every run costs two workflow runs.** The action posts its own "Claude Code is working…"
@@ -382,6 +383,17 @@ authenticated in the run from the OIDC-exchanged **Claude GitHub App** token, no
 `GITHUB_TOKEN`, which is also why the PR it opens **does** start `ci.yml` and `pr-preview.yml`
 (the default-token rule that suppresses workflow-from-workflow events does not apply to an app
 token).
+
+**And then it has to wait for those runs.** Opening the PR was the last thing the run did, so
+PR #22 was reported finished at 19:26:27 and its own `pr-preview.yml` run started at 19:26:16 —
+the checks did not exist while the run that caused them was alive, and that preview then failed.
+The fix is the same both-halves shape: `Bash(gh pr checks:*)`, `Bash(gh run view:*)` and
+`Bash(sleep:*)` on `--allowedTools`, plus an instruction to `sleep 60` (checks take a moment to
+register) and then `gh pr checks N --watch --interval 30 --fail-fast=false`, which **blocks** —
+so there is no polling loop to get wrong. There is no timeout to raise: `claude-code-action@v1`
+exposes no `timeout_minutes` input and this job sets no `timeout-minutes`, so the ceiling is
+GitHub's 360-minute default and the ~7 idle minutes fit under it easily. Those minutes are the
+real cost of the change, and they buy a run that cannot report "done" over a red PR.
 
 ## Lambda memory: 512 stays, and why the 1024 experiment proved less than it looked
 
