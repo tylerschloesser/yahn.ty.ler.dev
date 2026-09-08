@@ -91,9 +91,13 @@ GET /api/v1/search?q=&page=&sort=relevance|date
 GET /events/v1/enrich/thread/:id  streams SSE
 ```
 
-Same-origin under one CloudFront distribution, so no CORS and no preflight. Sign-in is Google
-through Cognito, and the ID token travels in `x-id-token` rather than `Authorization`, which
-CloudFront's origin access control overwrites with its own SigV4 signature. The origin sets short
+Same-origin under one CloudFront distribution, so no CORS and no preflight. **The whole site is
+behind a Google sign-in at the CloudFront edge**: a request with no valid session cookie is
+answered with a redirect to Cognito before it reaches an origin, so none of the endpoints above
+are reachable anonymously. Any Google account gets in — there is no allowlist. The credential is
+an `HttpOnly` cookie a CloudFront Function verifies; a machine caller can present a Cognito ID
+token in `x-id-token` instead, never `Authorization`, which CloudFront's origin access control
+overwrites with its own SigV4 signature. `pnpm dev` has no CloudFront and so is not gated. The origin sets short
 `Cache-Control` with `stale-while-revalidate`;
 CloudFront honors it, which is how a cached front page becomes one edge hit instead of 31 HN
 requests.

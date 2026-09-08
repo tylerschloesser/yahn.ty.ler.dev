@@ -184,6 +184,13 @@ defineSiteStacks(new App(), {
   // `redirect_uri_mismatch` at Google with nothing in any AWS log.
   auth: {
     domainPrefix: 'yahn-ty-ler-dev',
+    // The whole site sits behind Google, at the CloudFront edge: a request with
+    // no valid session cookie never reaches an origin — not the shell, not an
+    // asset, not `__config.json`, not `/api/*`. Set here rather than under
+    // `preview`, so it covers prod and every PR alike. `pnpm dev` has no
+    // CloudFront and so is not gated; that is not an oversight, see
+    // `.claude/rules/auth.md`.
+    gate: 'edge',
     preview: { domainPrefix: 'yahn-ty-ler-dev-preview' },
   },
   github: {

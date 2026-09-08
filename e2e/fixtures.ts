@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type BrowserContext, type Page } from '@playwright/test'
 
 /**
  * Machine auth for the e2e suite.
@@ -50,7 +50,7 @@ interface AuthenticationResult {
 }
 
 /** `pr-<n>.preview.<site>` -> `<site>`. */
-function siteFromPreviewHost(host: string): string {
+export function siteFromPreviewHost(host: string): string {
   const match = /^pr-\d+\.preview\.(.+)$/.exec(host)
   if (!match) throw new Error(`could not derive site from preview host: ${host}`)
   return match[1]!
@@ -129,42 +129,96 @@ async function fetchMachineIdentity(baseURL: string): Promise<MachineIdentity> {
 // (each worker is its own module instance) with none of that typing cost.
 let identityPromise: Promise<MachineIdentity> | undefined
 
+/** The memoised machine identity. Throws on `prod`, which has no machine user by design. */
+function machineIdentity(): Promise<MachineIdentity> {
+  if (TARGET === 'prod') {
+    // Loud rather than empty: a fixture that quietly yielded a useless token
+    // would turn this into a 401 twenty lines later.
+    throw new Error('machineAuth: production has no machine user by design — skip on TARGET')
+  }
+  identityPromise ??=
+    TARGET === 'preview'
+      ? fetchMachineIdentity(process.env.PLAYWRIGHT_BASE_URL!)
+      : Promise.resolve({ idToken: 'dev:claude', accessToken: 'dev:claude', email: 'claude@local' })
+  return identityPromise
+}
+
+/**
+ * Gives a browser context the edge session cookie, by exchanging the machine
+ * ID token at the one ungated route.
+ *
+ * `context.request`, never `request.newContext()`: an `APIRequestContext`
+ * obtained from a browser context shares that context's cookie jar, so the
+ * `Set-Cookie` lands where the subsequent `page.goto()` will send it. A
+ * standalone request context drops it, and the failure surfaces later as a
+ * redirect loop rather than as anything naming the cause.
+ */
+async function installSession(context: BrowserContext): Promise<void> {
+  const identity = await machineIdentity()
+  const response = await context.request.get('/auth/session', {
+    headers: { 'x-id-token': identity.idToken },
+  })
+  if (response.status() !== 204) {
+    throw new Error(
+      `installSession: GET /auth/session returned ${response.status()}, expected 204: ${await response.text()}`,
+    )
+  }
+}
+
 export const test = base.extend<{ machineAuth: MachineIdentity; authedPage: Page }>({
+  /**
+   * **Every** spec needs a session off local now, not just the auth ones: the
+   * whole site is behind the edge gate, so a plain `page.goto('/')` against a
+   * preview is answered with a 302 to Cognito and never reaches the app. So
+   * the default `page` carries the machine session on `preview`.
+   *
+   * Not on `local` — there is no gate and no `/auth/session` there, and
+   * `auth.spec.ts` needs a genuinely signed-out page to drive the dev-login
+   * box. Not on `prod` either: it has no machine identity by design, so the
+   * specs that need a session skip there rather than pretend.
+   *
+   * A spec that wants a *cookie-less* context on preview must build one with
+   * `browser.newContext()`, which this does not touch.
+   */
+  page: async ({ page }, use) => {
+    if (TARGET === 'preview') await installSession(page.context())
+    await use(page)
+  },
+
   // Playwright parses this signature at runtime to know which fixtures a
   // fixture depends on, so the first parameter must be a literal `{}` even
   // though this one depends on nothing.
   // oxlint-disable-next-line no-empty-pattern
   machineAuth: async ({}, use) => {
-    if (TARGET === 'prod') {
-      // Loud rather than empty: a spec that reaches for this against prod has
-      // forgotten its `test.skip(TARGET === 'prod', …)`, and a fixture that
-      // quietly yielded a useless token would turn that into a 401 twenty
-      // lines later.
-      throw new Error('machineAuth: production has no machine user by design — skip on TARGET')
-    }
-    identityPromise ??=
-      TARGET === 'preview'
-        ? fetchMachineIdentity(process.env.PLAYWRIGHT_BASE_URL!)
-        : Promise.resolve({ idToken: 'dev:claude', accessToken: 'dev:claude', email: 'claude@local' })
-    await use(await identityPromise)
+    await use(await machineIdentity())
   },
 
+  /**
+   * A page with a signed-in user, on every target.
+   *
+   * On `preview` the `page` fixture above has already installed the edge
+   * session, so this only has to add the one thing that differs: `local` has
+   * no gate and no `/auth/session`, so there a session is `localStorage`
+   * seeded before the first navigation, exactly as it was before the gate.
+   */
   authedPage: async ({ page, machineAuth }, use) => {
-    await page.addInitScript(
-      ({ storageKey, idToken, accessToken }) => {
-        window.localStorage.setItem(
-          storageKey,
-          JSON.stringify({
-            idToken,
-            accessToken,
-            // An hour out: long enough that no test's run time gets near the
-            // 5-minute refresh window baked into getToken().
-            expiresAt: Date.now() + 60 * 60 * 1000,
-          }),
-        )
-      },
-      { storageKey: 'cdkcore:auth', idToken: machineAuth.idToken, accessToken: machineAuth.accessToken },
-    )
+    if (TARGET === 'local') {
+      await page.addInitScript(
+        ({ storageKey, idToken, accessToken }) => {
+          window.localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              idToken,
+              accessToken,
+              // An hour out: long enough that no test's run time gets near the
+              // 5-minute refresh window baked into getToken().
+              expiresAt: Date.now() + 60 * 60 * 1000,
+            }),
+          )
+        },
+        { storageKey: 'cdkcore:auth', idToken: machineAuth.idToken, accessToken: machineAuth.accessToken },
+      )
+    }
     await use(page)
   },
 })
