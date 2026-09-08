@@ -22,14 +22,16 @@ export function AuthMenu() {
     void queryClient.invalidateQueries({ queryKey: ['me'] })
   }
 
-  async function handleSignIn() {
-    await login()
-    invalidateMe()
-  }
-
   function handleSignOut() {
-    logout()
-    invalidateMe()
+    if (config?.mode === 'local') {
+      logout()
+      invalidateMe()
+      return
+    }
+    // The session is an `HttpOnly` cookie set by the edge — JavaScript
+    // cannot clear it, so sign-out is a navigation to the Lambda route that
+    // does.
+    window.location.assign('/auth/logout')
   }
 
   async function handleDevSubmit(event: FormEvent<HTMLFormElement>) {
@@ -48,21 +50,6 @@ export function AuthMenu() {
         </span>
         <button type="button" data-testid="auth-signout" className={styles.button} onClick={handleSignOut}>
           Sign out
-        </button>
-      </div>
-    )
-  }
-
-  if (config?.auth) {
-    return (
-      <div className={styles.menu}>
-        <button
-          type="button"
-          data-testid="auth-signin"
-          className={styles.button}
-          onClick={() => void handleSignIn()}
-        >
-          Sign in with Google
         </button>
       </div>
     )

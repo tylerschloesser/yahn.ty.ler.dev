@@ -33,7 +33,8 @@ distributions, the preview router, OAC, the deploy role, the sweeper — is the 
 are its hard-won rules: cdk-core's `.claude/rules/cdk.md`, `cloudfront-origins.md`,
 `streaming-and-kvs.md` and `workflows.md`. **Do not re-implement what the package handles**: the
 `lambda:InvokeFunction`-alongside-`InvokeFunctionUrl` grant, `ALL_VIEWER_EXCEPT_HOST_HEADER`,
-the SPA fallback as a CloudFront Function on the default behavior only, the API living inside
+the SPA fallback as a CloudFront Function — now on **every** behavior except `/auth/*`, because
+it also carries the edge gate — the API living inside
 the site stack, and the asymmetric-`prune` `BucketDeployment` pair are all inside `Site` now.
 Each of them cost a debugging session once; the way to keep that paid is to not write a second
 copy.
@@ -41,10 +42,19 @@ copy.
 | Stack | Deployed by | Holds |
 | --- | --- | --- |
 | `YahnShared` | `deploy.yml`, and by hand first | the one ACM certificate, SANs `[yahn.ty.ler.dev, *.preview.yahn.ty.ler.dev]` |
-| `YahnPreview` | `deploy.yml` (rarely changes) | preview bucket, KeyValueStore, router function, the preview distribution, wildcard DNS, SSM params, **the preview Cognito pool + machine client + machine user + its secret** |
-| `YahnSite` | `deploy.yml` on `main` | prod bucket, distribution, apex DNS, **both Lambdas, the `EnrichTable`, the log groups, the prod Cognito pool** |
+| `YahnPreview` | `deploy.yml` (rarely changes) | preview bucket, KeyValueStore, router function, the preview distribution, wildcard DNS, SSM params, **the preview Cognito pool + machine client + machine user + its secret, the preview session secret + shared `/auth/*` Lambda** |
+| `YahnSite` | `deploy.yml` on `main` | prod bucket, distribution, apex DNS, **both Lambdas, the `EnrichTable`, the log groups, the prod Cognito pool, the gate's KeyValueStore + session secret + `/auth/*` Lambda** |
 | `Yahn-pr-<n>` | `pr-preview.yml` per PR | that PR's two Lambdas + a `PreviewDeployment` (assets under `pr-<n>/`, one KVS key) |
 | `YahnGithubOidc` | **you, locally, once** | the `yahn-github-deploy` role; its ARN is the `AWS_DEPLOY_ROLE_ARN` repo variable |
+
+- **The site is gated at the edge (`auth.gate: 'edge'`), and that spends most of a hard quota.**
+  A CloudFront Function may be **10,240 bytes and the limit is not adjustable**. Yahn's gated
+  preview router is **6,426** of it — the mechanism, the measurements and the traps are cdk-core's
+  `.claude/rules/edge-gate.md`, and there is a test there that fails at 8,192 so a third backend
+  cannot quietly walk into the wall. Prod gains a **KeyValueStore of its own** (the gate has no
+  environment variables, so the HMAC secret is read with `kvs.get()`), and both distributions gain
+  an `/auth/*` behavior that is `CACHING_DISABLED` and carries no function. Adding a backend now
+  costs ~539 bytes of that budget as well as a path pattern.
 
 - **`YahnGithubOidc` never deploys from CI** — it grants CI the trust CI would need to deploy it.
   No workflow names it. **It imports the account's OIDC provider, never creates one**; the

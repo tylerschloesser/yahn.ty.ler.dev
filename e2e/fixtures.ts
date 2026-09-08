@@ -50,7 +50,7 @@ interface AuthenticationResult {
 }
 
 /** `pr-<n>.preview.<site>` -> `<site>`. */
-function siteFromPreviewHost(host: string): string {
+export function siteFromPreviewHost(host: string): string {
   const match = /^pr-\d+\.preview\.(.+)$/.exec(host)
   if (!match) throw new Error(`could not derive site from preview host: ${host}`)
   return match[1]!
@@ -150,6 +150,44 @@ export const test = base.extend<{ machineAuth: MachineIdentity; authedPage: Page
   },
 
   authedPage: async ({ page, machineAuth }, use) => {
+    if (TARGET === 'preview') {
+      // The gate lives at the edge: a CloudFront Function checks the
+      // `__Host-cdkcore-session` cookie on every request and bounces an
+      // anonymous top-level navigation to Cognito's hosted UI before it ever
+      // reaches the app. That means `page.addInitScript` (below) cannot work
+      // here — an init script only runs once a page has loaded, and a gated
+      // `page.goto()` never gets that far. So the token has to become a
+      // cookie the browser context already holds *before* the first
+      // navigation, by exchanging it for a session up front.
+      //
+      // `page.context().request`, not `request.newContext()`: an
+      // `APIRequestContext` obtained from a browser context shares that
+      // context's cookie jar, so the `Set-Cookie` this call receives lands
+      // where the subsequent `page.goto()` will send it. A standalone
+      // request context would silently drop it, and the failure would show
+      // up ten lines later as a confusing 302 loop instead of here.
+      const response = await page.context().request.get('/auth/session', {
+        headers: { 'x-id-token': machineAuth.idToken },
+      })
+      if (response.status() !== 204) {
+        // Loud rather than a page that quietly renders signed-out: the
+        // whole point of this fixture is to hand back an authenticated
+        // page, and failing here names the actual problem instead of
+        // leaving it to surface as a confusing assertion failure later.
+        throw new Error(
+          `authedPage: GET /auth/session returned ${response.status()}, expected 204: ${await response.text()}`,
+        )
+      }
+      await use(page)
+      return
+    }
+
+    // local: `pnpm dev` has no CloudFront in front of it and therefore no
+    // edge gate at all, and the local API runs `AUTH=local`, which trusts
+    // the literal string `dev:<name>` with no round trip anywhere — there
+    // is no `/auth/session` endpoint locally. So an init script seeding
+    // `localStorage` before the first navigation is the whole mechanism
+    // here, same as before this fixture grew a preview branch.
     await page.addInitScript(
       ({ storageKey, idToken, accessToken }) => {
         window.localStorage.setItem(

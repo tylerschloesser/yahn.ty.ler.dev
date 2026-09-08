@@ -60,7 +60,18 @@ thing that broke.
   fixture throws loudly on `prod` rather than yielding a useless token, because **prod has no
   machine identity by design** and a spec reaching for one there has forgotten its skip. The
   assertion that earns the whole arrangement is the negative one: a *preview* token sent to
-  production must be 401. See `.claude/rules/auth.md`.
+  production must be 401 — and with the edge gate that assertion moved to
+  `GET https://yahn.ty.ler.dev/auth/session`, because `/api/v1/me` is now answered by a
+  **redirect at the edge** before the origin is reached. `/auth/*` is the one ungated path, so it
+  is the only place a token still gets as far as the prod verifier. See `.claude/rules/auth.md`.
+- **The gate changes how a session is seeded, and `page.addInitScript` no longer works
+  deployed.** An init script runs once a page has loaded, and a gated navigation never reaches a
+  page. So `authedPage` branches: `local` keeps seeding `localStorage['cdkcore:auth']` (there is
+  no gate in `pnpm dev`), while `preview` calls `GET /auth/session` with `x-id-token` through
+  **`page.context().request`** and lets the response's `Set-Cookie` land in the context's jar.
+  It must be that request object and not a standalone `request.newContext()`: only a context-
+  bound one shares the cookie jar the subsequent `page.goto()` reads, and the standalone form
+  fails as a redirect loop rather than as anything that names the cause.
 - **You rarely need to run the preview target by hand: `pr-preview.yml` already does**, after a
   gate that waits for `/api/health`. Previews live at `pr-<N>.preview.yahn.ty.ler.dev` behind a
   permanent wildcard record, so a stale NXDOMAIN in your resolver is no longer the failure mode;

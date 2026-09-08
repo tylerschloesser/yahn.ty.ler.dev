@@ -2,15 +2,19 @@
 paths:
   - "apps/api/src/auth.ts"
   - "apps/web/src/components/AuthMenu/**"
-  - "apps/web/src/routes/auth.callback.tsx"
   - "e2e/fixtures.ts"
   - "scripts/preview-login.sh"
 ---
 
 # Google sign-in: two pools, one Google client, and a machine user
 
-Loaded when you touch the auth seam, the sign-in control, the callback route, the e2e fixture or
-the login script.
+Loaded when you touch the auth seam, the sign-in control, the e2e fixture or the login script.
+
+**The whole site is behind Google auth at the CloudFront edge.** A stranger cannot load the
+app, an asset or `__config.json` — a request with no valid session cookie never reaches an
+origin. That is `auth: { gate: 'edge' }` in `infra/cdk/bin/app.ts`, and the mechanism is
+cdk-core's `.claude/rules/edge-gate.md`. **There is no allowlist: anyone with a Google account
+gets the whole app.** That is deliberate, not an oversight.
 
 **Almost none of this is yahn's code.** `@tylerschloesser/cdk-core` ships the pools, the browser
 PKCE flow, the server verifier, the preview bounce host and the machine user; yahn wires them
@@ -105,8 +109,22 @@ that one secret, which `YahnGithubOidc` already grants.
   that is a human doing a real Google login, and `e2e/auth.spec.ts` skips those cases on `prod`
   rather than pretending otherwise.
 
-## Tokens live in `localStorage['cdkcore:auth']`
+## The browser holds a cookie, not a token
 
-`{idToken, accessToken, refreshToken?, expiresAt}` under the app's **own** key, not Amplify's.
-That is what lets Playwright seed a session with `page.addInitScript` before the first
-navigation. Anything that changes this shape changes `e2e/fixtures.ts` in the same commit.
+Deployed, the credential is an `HttpOnly` cookie the page cannot read, set by the edge gate's
+`/auth/*` Lambda. The SPA does not start a login and does not handle a callback — that code is
+gone, along with `apps/web/src/routes/auth.callback.tsx`. `AuthMenu` shows the signed-in email,
+and "Sign out" is a **navigation to `/auth/logout`**, because JavaScript cannot clear an
+`HttpOnly` cookie.
+
+`localStorage['cdkcore:auth']` (`{idToken, accessToken, refreshToken?, expiresAt}`) survives for
+exactly one caller: **`pnpm dev`**, which has no CloudFront and therefore no gate. The dev-login
+box writes it and `AUTH=local` trusts it. `e2e/fixtures.ts` still seeds it with
+`page.addInitScript` on the local target — and cannot on a deployed one, because a gated
+navigation never reaches a page to run an init script in. There the fixture calls
+`GET /auth/session` with `x-id-token` through `page.context().request`, whose cookie jar the
+browser context shares.
+
+`apiFetch` stays and still attaches `x-id-token`. Deployed, that header is usually empty and
+the cookie is what authenticates; the header path is how a *machine* caller signs in. Both
+reach the same `getAuthUser(c)`.

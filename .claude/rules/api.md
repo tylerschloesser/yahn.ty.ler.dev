@@ -42,15 +42,21 @@ Loaded when you touch the API or the shared schema.
   `headerBehavior: none()`. `x-id-token` reaches the Lambda (the origin request policy is
   `ALL_VIEWER_EXCEPT_HOST_HEADER`) but is **not** part of the cache key, so a per-user body
   without `no-store` gets one user's response pinned at every edge and served to everyone for up
-  to 300s. Every other cdk-core site runs `/api/*` on `CACHING_DISABLED` and cannot hit this;
+  to 300s. **The edge gate does not help here and must not be mistaken for help.** The session
+  cookie is no more part of the cache key than the header is: the gate decides *whether* a
+  request proceeds, never *which* cached object it gets, so past the gate every signed-in visitor
+  shares one cache. The gate narrowed who can trigger the bug from the internet to anyone with a
+  Google account; it did not remove it. Every other cdk-core site runs `/api/*` on `CACHING_DISABLED` and cannot hit this;
   yahn is the only one that can. `/api/v1/me` is the one such route today, and it is also the
   one place in this file that sets its header **before** the work rather than after — there is
   no upstream call to fail, and the comment there says so.
 - **`getAuthUser(c)` in `src/auth.ts` is the only place the API learns who is calling.** It
   delegates to `@tylerschloesser/cdk-core/auth/server` and a middleware puts an `AuthUser | null`
-  on the context, so a handler never reads a header itself. The token arrives in `x-id-token`,
-  not `Authorization` — CloudFront's origin access control signs the origin request with SigV4
-  and overwrites `Authorization`. `.claude/rules/auth.md` has the two pools, the three `AUTH`
+  on the context, so a handler never reads a header or a cookie itself. **There are two
+  credentials and `getUser` tries both**: the `__Host-cdkcore-session` cookie the edge gate mints
+  (what a browser carries — deployed, the page holds no token at all) and `x-id-token` for a
+  machine caller. Never `Authorization`: CloudFront's origin access control signs the origin
+  request with SigV4 and overwrites it. `.claude/rules/auth.md` has the two pools, the three `AUTH`
   modes and the machine user.
 
 ## The enrichment API — a second app, a second Lambda, a second behavior

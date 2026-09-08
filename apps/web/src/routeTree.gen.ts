@@ -16,7 +16,6 @@ import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as NewestRouteImport } from './routes/newest'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ShowRouteImport } from './routes/show'
-import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as ItemIndexRouteImport } from './routes/item.index'
 import { Route as ItemIdRouteImport } from './routes/item.$id'
 import { Route as UserIdRouteImport } from './routes/user.$id'
@@ -56,11 +55,6 @@ const ShowRoute = ShowRouteImport.update({
   path: '/show',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthCallbackRoute = AuthCallbackRouteImport.update({
-  id: '/auth/callback',
-  path: '/auth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ItemIndexRoute = ItemIndexRouteImport.update({
   id: '/item/',
   path: '/item/',
@@ -85,7 +79,6 @@ export interface FileRoutesByFullPath {
   '/newest': typeof NewestRoute
   '/search': typeof SearchRoute
   '/show': typeof ShowRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/item/$id': typeof ItemIdRoute
   '/user/$id': typeof UserIdRoute
   '/item/': typeof ItemIndexRoute
@@ -98,7 +91,6 @@ export interface FileRoutesByTo {
   '/newest': typeof NewestRoute
   '/search': typeof SearchRoute
   '/show': typeof ShowRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/item/$id': typeof ItemIdRoute
   '/user/$id': typeof UserIdRoute
   '/item': typeof ItemIndexRoute
@@ -112,7 +104,6 @@ export interface FileRoutesById {
   '/newest': typeof NewestRoute
   '/search': typeof SearchRoute
   '/show': typeof ShowRoute
-  '/auth/callback': typeof AuthCallbackRoute
   '/item/$id': typeof ItemIdRoute
   '/user/$id': typeof UserIdRoute
   '/item/': typeof ItemIndexRoute
@@ -127,7 +118,6 @@ export interface FileRouteTypes {
     | '/newest'
     | '/search'
     | '/show'
-    | '/auth/callback'
     | '/item/$id'
     | '/user/$id'
     | '/item/'
@@ -140,7 +130,6 @@ export interface FileRouteTypes {
     | '/newest'
     | '/search'
     | '/show'
-    | '/auth/callback'
     | '/item/$id'
     | '/user/$id'
     | '/item'
@@ -153,7 +142,6 @@ export interface FileRouteTypes {
     | '/newest'
     | '/search'
     | '/show'
-    | '/auth/callback'
     | '/item/$id'
     | '/user/$id'
     | '/item/'
@@ -167,7 +155,6 @@ export interface RootRouteChildren {
   NewestRoute: typeof NewestRoute
   SearchRoute: typeof SearchRoute
   ShowRoute: typeof ShowRoute
-  AuthCallbackRoute: typeof AuthCallbackRoute
   ItemIdRoute: typeof ItemIdRoute
   UserIdRoute: typeof UserIdRoute
   ItemIndexRoute: typeof ItemIndexRoute
@@ -224,13 +211,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShowRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/callback': {
-      id: '/auth/callback'
-      path: '/auth/callback'
-      fullPath: '/auth/callback'
-      preLoaderRoute: typeof AuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/item/': {
       id: '/item/'
       path: '/item'
@@ -263,7 +243,6 @@ const rootRouteChildren: RootRouteChildren = {
   NewestRoute: NewestRoute,
   SearchRoute: SearchRoute,
   ShowRoute: ShowRoute,
-  AuthCallbackRoute: AuthCallbackRoute,
   ItemIdRoute: ItemIdRoute,
   UserIdRoute: UserIdRoute,
   ItemIndexRoute: ItemIndexRoute,
