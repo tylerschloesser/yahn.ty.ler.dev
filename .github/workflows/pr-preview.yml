@@ -81,10 +81,23 @@ jobs:
       - name: Wait for the preview to answer
         run: |
           set -euo pipefail
+          # This waits for the KeyValueStore write to reach the edge, which is
+          # what makes a just-deployed preview hostname resolvable at all.
+          #
+          # It checks the status code explicitly rather than leaning on
+          # `curl -f`, and that is the whole point: with the site behind the
+          # edge gate this URL now answers **302** to an anonymous poller, and
+          # `curl -f` only fails on >= 400 — so it treated the redirect as
+          # success and the gate silently stopped gating this step. Before the
+          # KVS key propagates the router returns **404 "no such preview"**, so
+          # "not 404" is the honest signal that the preview exists: a 302 (gated,
+          # no cookie) and a 200 (ungated build) both mean the router resolved
+          # the host and ran.
           url="https://pr-$PR.preview.yahn.ty.ler.dev/api/health"
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 10 "$url" > /dev/null; then
-              echo "$url answered after $i attempt(s)"
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || echo 000)
+            if [ "$code" != "404" ] && [ "$code" != "000" ]; then
+              echo "$url answered $code after $i attempt(s)"
               exit 0
             fi
             sleep 10

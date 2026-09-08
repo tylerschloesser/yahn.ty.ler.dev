@@ -67,9 +67,23 @@ jobs:
       - name: Wait for the site to answer
         run: |
           set -euo pipefail
+          # Explicit status check, not `curl -f`: behind the edge gate this URL
+          # answers **302** to an anonymous poller, and `curl -f` only fails on
+          # >= 400, so it read the redirect as success and stopped checking
+          # anything. A 302 or a 200 both mean the distribution answered and the
+          # gate ran; 000 means it did not answer at all.
+          #
+          # Note what this no longer proves. Before the gate, a 200 here came
+          # from the API Lambda, so it was an origin health check. Now nothing
+          # anonymous can reach the origin, and prod has **no machine identity
+          # by design** (`.claude/rules/auth.md`: the prod client's only auth
+          # flow is refresh and the pool has no native users), so there is no
+          # credential CI could use instead. Origin health on prod is covered
+          # by the PR preview run against real infrastructure before merge.
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 10 https://yahn.ty.ler.dev/api/health > /dev/null; then
-              echo "answered after $i attempt(s)"
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://yahn.ty.ler.dev/api/health || echo 000)
+            if [ "$code" = "302" ] || [ "$code" = "200" ]; then
+              echo "answered $code after $i attempt(s)"
               exit 0
             fi
             sleep 10
@@ -77,6 +91,12 @@ jobs:
           echo "https://yahn.ty.ler.dev/api/health never answered"
           exit 1
 
-      - run: pnpm e2e
+      # Only the gate specs against prod, and that is forced rather than
+      # chosen: every other spec drives the app through a signed-in `page`, and
+      # prod has no machine identity to sign in with. `auth.spec.ts`'s prod case
+      # asserts the 302 to the hosted UI, which does prove the distribution, the
+      # CloudFront Function and the KVS secret are live. Functional coverage
+      # against real infrastructure comes from the PR preview run before merge.
+      - run: pnpm e2e e2e/auth.spec.ts
         env:
           PLAYWRIGHT_BASE_URL: https://yahn.ty.ler.dev
