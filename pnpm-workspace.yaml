@@ -47,7 +47,7 @@ catalog:
   # Not infra-only: infra/cdk builds the stacks with it, apps/api verifies ID tokens
   # through its `auth/server` export, and apps/web drives the browser flow through
   # `auth/browser`. One version for all three, which is the point of the catalog.
-  '@tylerschloesser/cdk-core': ^0.2.0
+  '@tylerschloesser/cdk-core': ^0.2.1
   # shared
   typescript: ~6.0.3
   zod: ^4.5.4
@@ -71,4 +71,4 @@ minimumReleaseAgeExclude:
   - hono@4.13.7
   - playwright-core@1.63.0
   - playwright@1.63.0
-  - '@tylerschloesser/cdk-core@0.2.0'
+  - '@tylerschloesser/cdk-core@0.2.1'
