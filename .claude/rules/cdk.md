@@ -371,6 +371,18 @@ Three things its first run taught, all now fixed here:
   comment, which fires `issue_comment: created` again; the second run evaluates the `if:` and
   reports `skipped`. Normal, not a loop, and not worth guarding against.
 
+**The action does not open a PR on its own, and the allowlist alone will not make it.** Its
+built-in prompt says *"Provide a URL to create a PR manually"* — deliberate, so branch protection
+stays with a human (`anthropics/claude-code-action` `docs/faq.md`). Issues #8 and #9 each ended
+as a pushed `claude/issue-N-*` branch and a compare link, and #8's sat unclicked for a day. This
+repo overrides that with **both halves**: `Bash(gh pr create:*)` on `--allowedTools` *and* an
+`--append-system-prompt` telling the run to open the PR — the append lands after the built-in
+prompt, which is why it wins. Drop either half and you are back to compare links. `gh` is
+authenticated in the run from the OIDC-exchanged **Claude GitHub App** token, not the workflow's
+`GITHUB_TOKEN`, which is also why the PR it opens **does** start `ci.yml` and `pr-preview.yml`
+(the default-token rule that suppresses workflow-from-workflow events does not apply to an app
+token).
+
 ## Lambda memory: 512 stays, and why the 1024 experiment proved less than it looked
 
 1024MB was deployed to a preview and compared against 512MB on item 49563355 (1,603 nodes,

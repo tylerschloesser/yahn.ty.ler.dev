@@ -1,8 +1,9 @@
 # Claude Code GitHub Action. Responds when someone with write access mentions
 # @claude in an issue, an issue comment, a PR review or a PR review comment.
 # Interactive mode (no `prompt`): Claude reads the request from the event,
-# replies on the same issue or PR, and pushes a branch and opens a PR when
-# asked to implement something.
+# replies on the same issue or PR, and pushes a branch when asked to implement
+# something. Opening the PR from that branch is *not* the action's default —
+# see the `gh pr create` note on the allowlist below.
 #
 # Authenticates with a Claude subscription token (`claude setup-token`) stored
 # as the CLAUDE_CODE_OAUTH_TOKEN repository secret. The Claude GitHub App must
@@ -81,5 +82,17 @@ jobs:
           # outside its task can use the `file-issue` skill instead of
           # dropping the finding — the first run could not, and had to leave
           # it in a comment.
+          #
+          # `gh pr create` and the `--append-system-prompt` below are what make
+          # a run open its own PR. The action does not do this on its own and
+          # will not be persuaded by the allowlist alone: its built-in prompt
+          # says "Provide a URL to create a PR manually", by design, so that
+          # branch protection stays in the human's hands
+          # (anthropics/claude-code-action docs/faq.md). Issues #8 and #9 both
+          # ended as a pushed branch and a compare link nobody had clicked.
+          # Overriding it takes both halves — the tool and the instruction —
+          # and the append runs *after* the built-in prompt, which is why it
+          # wins.
           claude_args: |
-            --allowedTools "Bash(pnpm verify),Bash(pnpm lint),Bash(pnpm lint:fix),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm build),Bash(pnpm e2e),Bash(pnpm e2e:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh label list:*)"
+            --allowedTools "Bash(pnpm verify),Bash(pnpm lint),Bash(pnpm lint:fix),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm build),Bash(pnpm e2e),Bash(pnpm e2e:*),Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh pr create:*),Bash(gh label list:*)"
+            --append-system-prompt "This repository wants you to open the pull request yourself, which overrides the instruction above to provide a manual compare URL. Whenever you have pushed a branch with changes, run: gh pr create --base main --head THE_BRANCH_YOU_PUSHED --title ... --body ... . Write the body as Summary and Test plan sections, state what you ran and what you could not run, and include the line Fixes #N when the work closes an issue. Then report the URL of the PR you created rather than a compare link. If gh pr create fails, fall back to the compare link and say plainly that it failed and why."
