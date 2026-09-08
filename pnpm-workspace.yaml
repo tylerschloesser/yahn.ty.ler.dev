@@ -44,7 +44,9 @@ catalog:
   aws-cdk-lib: ^2.268.0
   aws-cdk: ^2.1140.0
   constructs: ^10.8.1
-  # infra (cdk-core migration)
+  # Not infra-only: infra/cdk builds the stacks with it, apps/api verifies ID tokens
+  # through its `auth/server` export, and apps/web drives the browser flow through
+  # `auth/browser`. One version for all three, which is the point of the catalog.
   '@tylerschloesser/cdk-core': ^0.1.2
   # shared
   typescript: ~6.0.3

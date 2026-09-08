@@ -188,6 +188,9 @@ importers:
       '@hono/zod-validator':
         specifier: 'catalog:'
         version: 0.9.1(hono@4.13.7)(zod@4.5.4)
+      '@tylerschloesser/cdk-core':
+        specifier: 'catalog:'
+        version: 0.1.2(aws-cdk-lib@2.268.0(constructs@10.8.1))(constructs@10.8.1)
       '@yahn/hn':
         specifier: workspace:*
         version: link:../../packages/hn
@@ -234,6 +237,9 @@ importers:
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tylerschloesser/cdk-core':
+        specifier: 'catalog:'
+        version: 0.1.2(aws-cdk-lib@2.268.0(constructs@10.8.1))(constructs@10.8.1)
       '@yahn/schema':
         specifier: workspace:*
         version: link:../../packages/schema

@@ -179,9 +179,13 @@ defineSiteStacks(new App(), {
     events: { pathPattern: '/events/*', streaming: true },
   },
   functions: backendFunctions,
-  // No `auth`: there is no user pool yet. This chunk is a pure infra swap —
-  // same Lambdas, same table, same secret, same CloudFront shape — not a new
-  // feature.
+  // Both prefixes are written out rather than defaulted: they also exist in the
+  // Google OAuth client's authorized redirect URIs, where a mismatch is a
+  // `redirect_uri_mismatch` at Google with nothing in any AWS log.
+  auth: {
+    domainPrefix: 'yahn-ty-ler-dev',
+    preview: { domainPrefix: 'yahn-ty-ler-dev-preview' },
+  },
   github: {
     repo: 'tylerschloesser/yahn.ty.ler.dev',
     roleName: 'yahn-github-deploy',

@@ -36,11 +36,22 @@ Loaded when you touch the API or the shared schema.
   Hit, on repeated requests. Do not "tidy" the header back to the top of a handler. This is a deliberate deviation from thai.ler.dev, which uses
   `CACHING_DISABLED` on `/api/*` — correct for a per-user sync API, wrong for a public
   read-only one. Do not "fix" it back.
-- **`getUserId(c)` in `src/auth.ts` is the only place the API learns who is calling.** It
-  returns `null` today and a middleware puts it on the context, so it is wired rather than
-  decorative. A handler that reads an auth header itself is what would make Cognito expensive
-  later. The token will arrive in `x-id-token`, not `Authorization` — CloudFront's origin
-  access control signs the origin request with SigV4 and overwrites `Authorization`.
+- **A route whose response varies by caller must set `Cache-Control: no-store`, and here that is
+  a security control rather than a performance one.** `/api/*` runs on
+  `CachePolicies.originDecides`, whose cache key is **query strings only** —
+  `headerBehavior: none()`. `x-id-token` reaches the Lambda (the origin request policy is
+  `ALL_VIEWER_EXCEPT_HOST_HEADER`) but is **not** part of the cache key, so a per-user body
+  without `no-store` gets one user's response pinned at every edge and served to everyone for up
+  to 300s. Every other cdk-core site runs `/api/*` on `CACHING_DISABLED` and cannot hit this;
+  yahn is the only one that can. `/api/v1/me` is the one such route today, and it is also the
+  one place in this file that sets its header **before** the work rather than after — there is
+  no upstream call to fail, and the comment there says so.
+- **`getAuthUser(c)` in `src/auth.ts` is the only place the API learns who is calling.** It
+  delegates to `@tylerschloesser/cdk-core/auth/server` and a middleware puts an `AuthUser | null`
+  on the context, so a handler never reads a header itself. The token arrives in `x-id-token`,
+  not `Authorization` — CloudFront's origin access control signs the origin request with SigV4
+  and overwrites `Authorization`. `.claude/rules/auth.md` has the two pools, the three `AUTH`
+  modes and the machine user.
 
 ## The enrichment API — a second app, a second Lambda, a second behavior
 
@@ -135,7 +146,8 @@ mirrors the split.
   CloudFormation template.
 - **State is a DynamoDB `TableV2`** keyed `pk=ITEM#<id>` /
   `sk=ENRICH#<kind>#<generatedAt>#<inputKey>` for enrichments — see the correction above. `pk=USER#<cognitoSub>` is still the reserved shape for
-  per-user data and is not built.
+  per-user data and is not built: auth landed, but yahn has no per-user state yet, so
+  `/api/v1/me` reads the token and nothing writes a row.
 
 ## The schema
 

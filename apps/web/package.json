@@ -14,6 +14,7 @@
     "@radix-ui/colors": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
+    "@tylerschloesser/cdk-core": "catalog:",
     "@yahn/schema": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:",

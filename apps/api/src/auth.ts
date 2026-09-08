@@ -1,27 +1,20 @@
 import type { Context } from 'hono'
+import { getUser, type AuthUser } from '@tylerschloesser/cdk-core/auth/server'
+
+export type { AuthUser }
 
 /**
- * The single place this API learns who is calling. It returns `null` today,
- * and every route is public and unauthenticated — there is no auth, no writes
- * and no per-user state in this epoch.
+ * The single place this API learns who is calling. No handler ever reads a
+ * header itself — that is what keeps this cheap to change later.
  *
- * It exists anyway because it is the seam. When Cognito's Google IdP lands,
- * per-user reading history and cached enrichments are partitioned by whatever
- * this returns, and wiring real auth up is a change to this function and
- * nothing else. A route that reaches for a header itself would be the thing
- * that makes that change expensive.
+ * The token travels in `x-id-token`, never `Authorization`: CloudFront's
+ * origin access control signs the origin request with SigV4 and overwrites
+ * `Authorization` before the Lambda ever sees it.
  *
- * The body becomes roughly:
- *
- *   const verifier = CognitoJwtVerifier.create({ userPoolId, tokenUse: 'id', clientId })
- *   const payload = await verifier.verify(c.req.header('x-id-token') ?? '')
- *   return payload.sub
- *
- * The token travels in `x-id-token`, not `Authorization`: CloudFront's origin
- * access control signs the origin request with SigV4 and writes its own
- * `Authorization` header, so a viewer-supplied one is overwritten before the
- * Lambda ever sees it.
+ * The mode comes from the `AUTH` env var: `cognito` (set by the CDK) verifies
+ * a real Cognito ID token, `local` (set by `applyLocalDefaults()`) trusts any
+ * `x-id-token` starting with `dev:`, and unset means `none` — always `null`.
  */
-export function getUserId(_c: Context): string | null {
-  return null
+export async function getAuthUser(c: Context): Promise<AuthUser | null> {
+  return getUser(c)
 }

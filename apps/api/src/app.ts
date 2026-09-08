@@ -3,7 +3,7 @@ import { getAuthorItems, getFeed, getItem, getUser, search, NotFoundError, Upstr
 import { AuthorItemTypeSchema, FeedNameSchema, SearchSortSchema } from '@yahn/schema'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { getUserId } from './auth.ts'
+import { getAuthUser, type AuthUser } from './auth.ts'
 
 /**
  * The read API. It is deliberately thin: routing, validation, cache headers
@@ -18,7 +18,7 @@ import { getUserId } from './auth.ts'
  * are cached hard, which is a property of a CloudFront behavior.
  */
 
-type Variables = { userId: string | null }
+type Variables = { user: AuthUser | null }
 
 /**
  * Cache-Control is where this Lambda earns its keep. CloudFront honors what
@@ -82,15 +82,31 @@ export function createApp(): Hono<{ Variables: Variables }> {
   const app = new Hono<{ Variables: Variables }>()
 
   // The auth seam, wired rather than decorative: every handler reads the
-  // caller's identity from here and never from a header. It is `null` for now.
+  // caller's identity from here and never from a header.
   app.use('*', async (c, next) => {
-    c.set('userId', getUserId(c))
+    c.set('user', await getAuthUser(c))
     await next()
   })
 
   app.get('/api/health', (c) => {
     c.header('Cache-Control', 'no-store')
     return c.json({ ok: true })
+  })
+
+  app.get('/api/v1/me', (c) => {
+    // Set before the check, not after an upstream call — the opposite of the
+    // convention above. There is no upstream call here that could throw and
+    // leave a stale header behind, and `no-store` is a security control on
+    // this route rather than a performance one: `/api/*` runs on
+    // `CachePolicies.originDecides`, whose cache key is query strings only
+    // (`headerBehavior: none()`), so `x-id-token` reaches the Lambda but is
+    // never part of the cache key. A per-user response without `no-store`
+    // would get one user's identity pinned at every CloudFront edge and
+    // served to everyone for up to 300s.
+    c.header('Cache-Control', 'no-store')
+    const user = c.get('user')
+    if (!user) return c.json({ error: 'unauthorized' }, 401)
+    return c.json({ sub: user.sub, email: user.email })
   })
 
   app.get(
