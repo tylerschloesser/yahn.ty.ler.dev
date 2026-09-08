@@ -89,9 +89,20 @@ unset = `none`, where `getUser` returns `null` for everyone.
 
 `YahnPreview` creates a `claude` native user whose generated password lives in Secrets Manager at
 `yahn.ty.ler.dev/preview-machine-user` (JSON `{username, password, clientId, userPoolId}`). That
-is what lets CI and a Claude session sign into a preview with no browser and no Google account:
-`scripts/preview-login.sh` prints a fresh ID token on stdout, and `e2e/fixtures.ts` makes the
-same two AWS CLI calls.
+is what lets CI and a Claude session sign into a preview with no browser and no Google account.
+
+**Both now take a third step, and it is not optional.** With the gate in front of everything, a
+raw `x-id-token` header is refused at the *edge* before it reaches the Lambda — only `/auth/*` is
+ungated. So the ID token has to be exchanged for a session cookie first:
+
+- `scripts/preview-login.sh <pr>` reads the secret, calls `initiate-auth`, then
+  `GET /auth/session` with the token, and prints **the path to a cookie jar** on stdout — not the
+  token. Use it as `curl -b "$(scripts/preview-login.sh 12)" https://pr-12.preview.…/`.
+  **`<pr>` is now required**: a `__Host-` cookie is host-only by spec, so a session has to be
+  minted against one specific preview host, even though the two AWS calls behind it are identical
+  for every PR of a site.
+- `e2e/fixtures.ts` makes the same two AWS calls and then the same exchange, through
+  `page.context().request` so the cookie lands in the browser context's jar.
 
 `InitiateAuth` is an **unauthenticated** Cognito API, so both call it `--no-sign-request` and need
 no IAM permission for it; the only permission on this path is `secretsmanager:GetSecretValue` on
@@ -101,8 +112,10 @@ that one secret, which `YahnGithubOidc` already grants.
   backoff. Do not retry a failed `initiate-auth` — re-read the secret.** The usual cause is a
   stack update having rotated the generated password, and the secret always has the current one;
   a retry loop only extends the lockout.
-- Use `$(scripts/preview-login.sh)`, never `xargs -I{}`: that form truncates a replacement line
-  at 255 bytes and a Cognito ID token is ~1050, so every call 401s with no clue why.
+- **Never pipe a Cognito ID token through `xargs -I{}`.** That form truncates a replacement line
+  at 255 bytes and an ID token is ~1050, so every call 401s with no clue why. `preview-login.sh`
+  no longer prints a token, so its own output is safe — but the trap is still live any time you
+  handle the raw token yourself, which is what `initiate-auth` hands you.
 - **Production has no machine identity, by design.** Its only app client's `ExplicitAuthFlows` is
   exactly `["ALLOW_REFRESH_TOKEN_AUTH"]` — there is no password flow to call and no flag to flip,
   and the pool has no native users. So nothing automated can check the signed-in half of prod;

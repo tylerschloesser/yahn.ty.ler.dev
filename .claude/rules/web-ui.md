@@ -77,9 +77,15 @@ stylelint config.
   exception**: it uses plain `useQuery` for `configQueryOptions`/`meQueryOptions`, because a
   suspending header would hold up the whole shell to answer "who is signed in", which is not
   worth blocking a page of stories on. It renders its signed-out state while those are pending.
+  Off local that state is now **nothing at all**, not a sign-in button: the edge gate means the
+  app is only ever reached by someone already signed in, so there is nobody to offer a button to.
+  The dev-login form is the one signed-out affordance left, and it is local-only.
 - **Every call to `/api` or `/events` goes through `apiFetch`, never a bare `fetch`.** It comes
   from `@tylerschloesser/cdk-core/auth/browser` and is where `x-id-token` is attached, so no
-  component ever handles a token. `src/api.ts`'s `getJson` is the choke point for the five typed
+  component ever handles a token. Deployed, that header is usually *empty* and the edge's
+  `HttpOnly` session cookie is what authenticates — `apiFetch` stays because it is still the
+  choke point and because the header path is how a machine caller signs in
+  (`.claude/rules/auth.md`). `src/api.ts`'s `getJson` is the choke point for the five typed
   fetchers; `ThreadSummary` calls it directly for the one SSE stream. It takes the same
   `(input, init)` as `fetch` and passes `init` straight through, abort signal included.
 - **Vite serves `/__config.json` locally**, from the `localConfigJson()` plugin in
