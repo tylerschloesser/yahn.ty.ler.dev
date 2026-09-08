@@ -144,22 +144,6 @@ test.describe(() => {
       headers: { 'x-id-token': machineAuth.idToken },
     })
 
-    // Tolerated for exactly one reason: a production deploy that predates the
-    // `/auth/*` behavior existing at all. **The signal is the content type,
-    // not the status.** Without that behavior the request falls through to
-    // prod's SPA fallback, whose whole rule is that an extensionless path
-    // serves the app shell — so `/auth/session` comes back **200 text/html**,
-    // never a 404. Keying this on 404 (the obvious guess, and the first
-    // version of this test) makes it fail against a pre-gate production with
-    // `expected 401, received 200`, which reads exactly like the pool
-    // isolation having broken. The deployed Lambda always answers
-    // `text/plain`, so the two cases cannot be confused.
-    const contentType = res.headers()['content-type'] ?? ''
-    if (res.status() === 200 && contentType.includes('text/html')) {
-      test.skip(true, 'the /auth/* behavior is not deployed to production yet (got the SPA shell)')
-      return
-    }
-
     // The invariant is **not accepted**: a 2xx or anything but 401 here
     // would mean production's verifier trusted a token minted by the
     // preview pool, which is the only outcome that would actually be a bug.
