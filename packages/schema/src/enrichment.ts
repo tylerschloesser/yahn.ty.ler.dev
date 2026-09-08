@@ -44,6 +44,15 @@ export const EnrichmentInputSchema = z.looseObject({
   /** Characters of prompt input. The cheap proxy for cost, available offline. */
   chars: z.number().int(),
 
+  /**
+   * The `budget` strategy's cap, when `strategy` is `'budget'`; absent for
+   * `full`/`top-level`, where it played no part in the render. Optional so a
+   * row written before this field existed still parses — it just never
+   * matches the cheap pre-render check in `store.ts`, which needs it to
+   * compare coverage without re-rendering.
+   */
+  budgetChars: z.number().int().optional(),
+
   /** Billed tokens, when the provider reported them. `fake` reports none. */
   inputTokens: z.number().int().nullable(),
   outputTokens: z.number().int().nullable(),

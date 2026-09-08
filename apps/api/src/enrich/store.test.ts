@@ -13,19 +13,27 @@ import { getStore, type EnrichStore } from './store.ts'
  * `STORE=memory` keeps this offline, as every test in this repo must be.
  */
 
-function summary(over: { comments: number; totalComments: number; generatedAt: number; inputKey: string }): ThreadSummary {
+function summary(over: {
+  comments: number
+  totalComments: number
+  generatedAt: number
+  inputKey: string
+  strategy?: string
+  budgetChars?: number
+}): ThreadSummary {
   return {
     text: `summary of ${over.comments} comments`,
     model: 'fake',
     generatedAt: over.generatedAt,
     inputKey: over.inputKey,
     input: {
-      strategy: 'budget',
+      strategy: over.strategy ?? 'budget',
       comments: over.comments,
       totalComments: over.totalComments,
       chars: over.comments * 100,
       inputTokens: null,
       outputTokens: null,
+      budgetChars: over.budgetChars,
     },
   }
 }
@@ -100,5 +108,99 @@ describe('the enrichment read-through', () => {
     expect(
       await store.read({ itemId: 10, kind: 'thread-summary', inputKey: 'a', totalComments: 10, comments: 10 }),
     ).toBeNull()
+  })
+
+  describe('the cheap pre-render check', () => {
+    // `comments`/`inputKey` omitted throughout: this is the query shape
+    // `cheapRead` in `app.ts` sends before any tree fetch, when only
+    // `descendants` (here, `totalComments`) and the request's own selection
+    // parameters are known.
+
+    it('hits on matching strategy, budget and freshness', async () => {
+      await store.put(
+        11,
+        'thread-summary',
+        summary({ comments: 652, totalComments: 1622, generatedAt: 100, inputKey: 'a', budgetChars: 200_000 }),
+      )
+      const hit = await store.read({
+        itemId: 11,
+        kind: 'thread-summary',
+        totalComments: 1622,
+        strategy: 'budget',
+        budgetChars: 200_000,
+      })
+      expect(hit?.inputKey).toBe('a')
+    })
+
+    it('misses on a strategy mismatch', async () => {
+      await store.put(
+        12,
+        'thread-summary',
+        summary({ comments: 300, totalComments: 300, generatedAt: 100, inputKey: 'a', strategy: 'top-level' }),
+      )
+      expect(
+        await store.read({
+          itemId: 12,
+          kind: 'thread-summary',
+          totalComments: 300,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
+
+    it('misses on a budget mismatch', async () => {
+      await store.put(
+        13,
+        'thread-summary',
+        summary({ comments: 300, totalComments: 300, generatedAt: 100, inputKey: 'a', budgetChars: 40_000 }),
+      )
+      expect(
+        await store.read({
+          itemId: 13,
+          kind: 'thread-summary',
+          totalComments: 300,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
+
+    it('misses once growth exceeds tolerance, same as the render-time check', async () => {
+      await store.put(
+        14,
+        'thread-summary',
+        summary({ comments: 300, totalComments: 300, generatedAt: 100, inputKey: 'a', budgetChars: 200_000 }),
+      )
+      expect(
+        await store.read({
+          itemId: 14,
+          kind: 'thread-summary',
+          totalComments: 600,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
+
+    it('misses a legacy row with no stored budgetChars, falling back to the slow path', async () => {
+      // A row written before `budgetChars` existed on the schema. It must
+      // never wrongly match — only ever miss cheaply and let the caller
+      // render and recheck with the exact `comments` count.
+      await store.put(
+        15,
+        'thread-summary',
+        summary({ comments: 300, totalComments: 300, generatedAt: 100, inputKey: 'a' }),
+      )
+      expect(
+        await store.read({
+          itemId: 15,
+          kind: 'thread-summary',
+          totalComments: 300,
+          strategy: 'budget',
+          budgetChars: 200_000,
+        }),
+      ).toBeNull()
+    })
   })
 })
