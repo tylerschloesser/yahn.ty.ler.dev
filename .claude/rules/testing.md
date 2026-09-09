@@ -85,14 +85,18 @@ thing that broke.
   and that is forced.** Every other spec drives the app through a signed-in `page`, and prod has
   **no machine identity by design**, so there is no credential CI could sign in with. What is
   left does prove something real — the 302 to the hosted UI means the distribution, the
-  CloudFront Function and the KVS secret are all live — but origin health on prod is now covered
-  by the PR preview run before merge, not after it. Do not "fix" this by giving the prod pool a
-  machine user; that is the thing `auth.md` calls structurally impossible on purpose.
-- **A health-gate `curl` must check the status code, not lean on `curl -f`.** Behind the gate
-  `/api/health` answers **302** to an anonymous poller, and `-f` only fails on >= 400 — so both
-  workflows' wait loops read the redirect as success and silently stopped gating anything. They
-  now compare `%{http_code}`: on preview "not 404" means the router resolved the host (a missing
-  KVS key is a 404), on prod a 302 or 200 means the distribution answered.
+  CloudFront Function and the KVS secret are all live — and **`deploy.yml`'s poll of the ungated
+  `/api/health` covers prod origin health again** (`auth.ungatedPaths`, cdk-core >= 0.2.2), which
+  for a while it did not: between the gate landing and 0.2.2 nothing in CI reached a prod origin
+  at all. The *signed-in* half of prod is still only the PR preview run before merge. Do not
+  "fix" that by giving the prod pool a machine user; that is the thing `auth.md` calls
+  structurally impossible on purpose.
+- **A health-gate `curl` must check the status code, not lean on `curl -f`.** Behind the gate a
+  URL answers **302** to an anonymous poller, and `-f` only fails on >= 400 — so both workflows'
+  wait loops read the redirect as success and silently stopped gating anything. They compare
+  `%{http_code}` now. `/api/health` is itself ungated again (`auth.ungatedPaths`), so `deploy.yml`
+  requires a literal **200**; `pr-preview.yml` still accepts "not 404" because it is waiting on
+  the router resolving the host, not on the origin. Keep the habit for any *gated* URL you poll.
 - **You rarely need to run the preview target by hand: `pr-preview.yml` already does**, after a
   gate that waits for `/api/health`. Previews live at `pr-<N>.preview.yahn.ty.ler.dev` behind a
   permanent wildcard record, so a stale NXDOMAIN in your resolver is no longer the failure mode;
