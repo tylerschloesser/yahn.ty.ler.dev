@@ -116,6 +116,25 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: https://pr-${{ github.event.pull_request.number }}.preview.yahn.ty.ler.dev
 
+      # Only when `e2e` itself failed, so a green run pays nothing and a run
+      # where `deploy` failed — and `e2e` never wrote anything — does not upload
+      # an empty artifact. `playwright.config.ts` already produces both paths on
+      # CI: `test-results/` holds the traces (`trace: 'on-first-retry'`, which
+      # fires because `retries` is 2 on CI) and `playwright-report/` the html
+      # reporter's output. This step is only what keeps them past the runner.
+      #
+      # 7 days: a trace is megabytes, and it is only useful while the preview
+      # stack that produced it still exists.
+      - name: Upload Playwright traces
+        if: always() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-pr-${{ github.event.pull_request.number }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
       # `always()`, so a failing preview still tells the PR where to look.
       - name: Comment preview URL
         if: always()

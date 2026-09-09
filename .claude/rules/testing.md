@@ -102,6 +102,9 @@ thing that broke.
   permanent wildcard record, so a stale NXDOMAIN in your resolver is no longer the failure mode;
   a 404 right after a deploy is the preview router not yet knowing the hostname (a KeyValueStore
   write reaching the edge). Wait for the gate, or re-run it. See `.claude/rules/cdk.md`.
+  **When that run's `e2e` fails it uploads `test-results/` and `playwright-report/`** as the
+  `playwright-pr-<N>` artifact (7-day retention) — so read the trace with
+  `gh run download <run-id> -n playwright-pr-<N>` instead of re-running to reproduce.
 - **`pnpm e2e -- e2e/x.spec.ts` does not filter** — the `--` is swallowed and the whole suite
   runs. `pnpm e2e e2e/x.spec.ts` is the form that works.
 - `expect.timeout` is raised above Playwright's default because live HN, not a fixture, is the
