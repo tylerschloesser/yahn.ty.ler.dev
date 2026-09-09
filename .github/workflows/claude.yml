@@ -7,7 +7,10 @@
 #
 # Authenticates with a Claude subscription token (`claude setup-token`) stored
 # as the CLAUDE_CODE_OAUTH_TOKEN repository secret. The Claude GitHub App must
-# also be installed on the repo. See .claude/rules/cdk.md.
+# also be installed on the repo. Editing a file under `.github/workflows/`
+# needs a second, repo-owned App on top of that — see the `app-token` step
+# below, which is skipped and harmless until it is configured. See
+# .claude/rules/cdk.md.
 #
 # The `issues: opened` trigger means an issue whose title or body contains
 # "@claude" starts a run the moment it is created. Issues Claude files never
@@ -64,9 +67,55 @@ jobs:
       # which is cheaper than a run that cannot check its own UI work.
       - run: pnpm exec playwright install --with-deps chromium
 
+      # The one thing a run cannot do with the stock token: edit a workflow.
+      #
+      # The Claude GitHub App token the action exchanges its OIDC token for has
+      # no `workflows` permission, and the job's `permissions:` block above
+      # cannot grant it either — GitHub has no `workflows:` key there. So a run
+      # that touches `.github/workflows/**` does the whole job and then dies at
+      # `git push` with "refusing to allow a GitHub App to create or update
+      # workflow ... without `workflows` permission". Issue #23 ended exactly
+      # there: a correct 17-line fix, committed, unpushable, pasted into a
+      # comment for a human to apply by hand.
+      #
+      # A repo-owned GitHub App that *does* hold the permission is the
+      # documented way out — that is what the action's `github_token` input is
+      # for (anthropics/claude-code-action `docs/faq.md`: "only include this if
+      # you're connecting a custom GitHub app").
+      #
+      # Gated on the variable so this stays inert until that App exists. With
+      # the step skipped `steps.app-token.outputs.token` is the empty string,
+      # and the action's own `if (providedToken)` (`src/github/token.ts`) falls
+      # straight back to the claude[bot] OIDC token — so an unconfigured repo
+      # behaves exactly as it did before this step was added. Set the variable
+      # and the secret and Claude can edit its own CI; leave them and nothing
+      # changes.
+      #
+      # Setup, once: a GitHub App owned by this account with Contents,
+      # Pull requests, Issues and **Workflows** at read/write and Actions at
+      # read, installed on this repo; its id as the CLAUDE_APP_ID repository
+      # *variable* (not a secret — it is public, and `vars` is what an `if:`
+      # can read) and its private key as the CLAUDE_APP_PRIVATE_KEY secret.
+      #
+      # The visible cost: comments and commits then come from that App rather
+      # than claude[bot]. `use_sticky_comment` would break under a custom token
+      # — this workflow does not use it. PRs still start `ci.yml` and
+      # `pr-preview.yml`, because an App token is not the default GITHUB_TOKEN
+      # and the workflow-from-workflow suppression does not apply to it.
+      - name: Mint a token that may edit workflows
+        id: app-token
+        if: vars.CLAUDE_APP_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.CLAUDE_APP_ID }}
+          private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
+
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Empty when the step above was skipped, which the action reads as
+          # "not provided" and ignores. See that step's comment.
+          github_token: ${{ steps.app-token.outputs.token }}
           # `pnpm verify` is the whole point: it is lint + typecheck + test +
           # build, it is what every other job in this repo runs, and it needs
           # no credentials. Its four parts are listed too, because a run that

@@ -399,6 +399,21 @@ exposes no `timeout_minutes` input and this job sets no `timeout-minutes`, so th
 GitHub's 360-minute default and the ~7 idle minutes fit under it easily. Those minutes are the
 real cost of the change, and they buy a run that cannot report "done" over a red PR.
 
+**And it still cannot edit `.github/workflows/**` unless a second App is configured.** The token
+the action exchanges its OIDC token for is the *Claude* GitHub App's, which has no `workflows`
+permission; the job's `permissions:` block cannot grant it either, because GitHub has no
+`workflows:` key there. The failure comes at `git push`, after the work is done — *refusing to
+allow a GitHub App to create or update workflow `.github/workflows/x.yml` without `workflows`
+permission* — which is how issue #23 ended: a correct fix, committed in the run, pasted into a
+comment for a human to apply. The way out is the action's `github_token` input fed from a
+**repo-owned** App that holds the permission (`actions/create-github-app-token@v3`, the
+`app-token` step in `claude.yml`), configured by the `CLAUDE_APP_ID` repository *variable* and
+the `CLAUDE_APP_PRIVATE_KEY` secret. It is `if:`-gated on the variable, so an unconfigured repo
+skips the step, passes an empty `github_token`, and the action's `if (providedToken)` falls back
+to claude[bot] exactly as before — **the step is inert, not broken, until someone sets it up**.
+When it *is* set up, comments and commits come from that App instead of claude[bot]; that is the
+whole visible cost, and `use_sticky_comment` (which a custom token breaks) is not used here.
+
 ## Lambda memory: 512 stays, and why the 1024 experiment proved less than it looked
 
 1024MB was deployed to a preview and compared against 512MB on item 49563355 (1,603 nodes,
