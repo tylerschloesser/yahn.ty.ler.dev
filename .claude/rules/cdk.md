@@ -47,13 +47,17 @@ copy.
 | `Yahn-pr-<n>` | `pr-preview.yml` per PR | that PR's two Lambdas + a `PreviewDeployment` (assets under `pr-<n>/`, one KVS key) |
 | `YahnGithubOidc` | **you, locally, once** | the `yahn-github-deploy` role; its ARN is the `AWS_DEPLOY_ROLE_ARN` repo variable |
 
-- **A workflow step that polls an endpoint anonymously now gets a `302`, and `curl -f` does not
-  fail on one.** Both wait-loops (`pr-preview.yml`, `deploy.yml`) used `curl -fsS .../api/health`
-  and so read the gate's redirect as success — they passed while checking nothing. They compare
-  `%{http_code}` now: on preview "not 404" means the router resolved the host (a missing KVS key
-  is the 404), on prod a 302 or 200 means the distribution answered. The same trap applies to any
-  new step you add. `.claude/rules/testing.md` has the matching change to the e2e runs, including
-  why the prod post-deploy run is now only `e2e/auth.spec.ts`.
+- **A workflow step that polls a *gated* endpoint anonymously gets a `302`, and `curl -f` does
+  not fail on one.** Both wait-loops (`pr-preview.yml`, `deploy.yml`) used `curl -fsS
+  .../api/health` and so read the gate's redirect as success — they passed while checking
+  nothing. They compare `%{http_code}` now, and **that habit is the durable lesson even though
+  `/api/health` itself is no longer gated**: `auth.ungatedPaths: ['/api/health']` (cdk-core
+  >= 0.2.2) exempts it on prod and every preview alike, so `deploy.yml` requires a literal
+  **200** again and that 200 is a real answer from the API Lambda. `pr-preview.yml` still gates
+  on "not 404" because what *it* waits for is the router resolving the host, not origin health
+  (a missing KVS key is the 404). Any new step that polls a gated URL hits the original trap.
+  `.claude/rules/testing.md` has the matching change to the e2e runs, including why the prod
+  post-deploy run is still only `e2e/auth.spec.ts`.
 - **The site is gated at the edge (`auth.gate: 'edge'`), and that spends most of a hard quota.**
   A CloudFront Function may be **10,240 bytes and the limit is not adjustable**. Yahn's gated
   preview router is **6,426** of it — the mechanism, the measurements and the traps are cdk-core's

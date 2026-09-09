@@ -85,14 +85,15 @@ jobs:
           # what makes a just-deployed preview hostname resolvable at all.
           #
           # It checks the status code explicitly rather than leaning on
-          # `curl -f`, and that is the whole point: with the site behind the
-          # edge gate this URL now answers **302** to an anonymous poller, and
-          # `curl -f` only fails on >= 400 — so it treated the redirect as
-          # success and the gate silently stopped gating this step. Before the
-          # KVS key propagates the router returns **404 "no such preview"**, so
-          # "not 404" is the honest signal that the preview exists: a 302 (gated,
-          # no cookie) and a 200 (ungated build) both mean the router resolved
-          # the host and ran.
+          # `curl -f`, and that is the whole point: `curl -f` only fails on
+          # >= 400, so behind the edge gate it treated the 302 as success and
+          # this step silently stopped gating anything. Before the KVS key
+          # propagates the router returns **404 "no such preview"**, so "not
+          # 404" is the honest signal that the preview exists — which is all
+          # this loop waits for. `/api/health` is in `auth.ungatedPaths` now
+          # (cdk-core >= 0.2.2), so it answers **200** here; a 302 would mean
+          # the exemption is gone. Either way the router resolved the host, so
+          # the check stays "not 404" rather than pinning a code.
           url="https://pr-$PR.preview.yahn.ty.ler.dev/api/health"
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || echo 000)

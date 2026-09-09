@@ -191,6 +191,18 @@ defineSiteStacks(new App(), {
     // CloudFront and so is not gated; that is not an oversight, see
     // `.claude/rules/auth.md`.
     gate: 'edge',
+    // The one hole in that, and it is deliberate. `deploy.yml` polls this URL
+    // after a deploy; behind the gate it answered 302 to an anonymous poller,
+    // and since prod has **no machine identity by design** (the prod client's
+    // only auth flow is refresh and the pool has no native users), nothing in
+    // CI could reach a prod origin at all — a deploy that broke only in prod
+    // shipped green. Ungated, it is a real origin health check again.
+    //
+    // What it costs: `/api/health` and `/api/health/*` answer anyone, on prod
+    // and on every preview host, with no check whatsoever. So it returns
+    // liveness and nothing else. Nothing that reads a user, a session or any
+    // stored content may be added to it or under it.
+    ungatedPaths: ['/api/health'],
     preview: { domainPrefix: 'yahn-ty-ler-dev-preview' },
   },
   github: {
