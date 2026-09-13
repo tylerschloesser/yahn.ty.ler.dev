@@ -127,6 +127,11 @@ no context.
   - `.oxlintrc.json` and `stylelint.config.js` from main with `apps/web/src` → `src`. Stylelint's
     `importFrom` is `src/styles/tokens.css` only.
 - **Check:** `pnpm install --frozen-lockfile && pnpm verify && grep -q '"node": "24.x"' package.json && test ! -e src/App.tsx`
+- **Amended at G0** (the skeleton has no CSS, no server files, and no e2e files yet, so three tools fail on
+  empty input): `lint` passes `--allow-empty-input` to stylelint; `tsconfig.server.json` and
+  `tsconfig.e2e.json` add `"files": []` to avoid TS18003. Both stay. `typecheck` temporarily skips `cmk`
+  while no `*.module.css` exists (cmk errors on zero files, with no flag to suppress it). **The manager
+  restores `typecheck` to exactly `cmk -p tsconfig.app.json && tsc -b` at G2**, once C8 lands module CSS.
 
 ### C2 · Context files (wave 0)
 - **Agent:** implementer → verifier. The manager reviews every rule at G0.

@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  // Explicit empty `files` suppresses
+  // TS18003 ("no inputs found") while `api/`, `server/`, `shared/`, and
+  // `scripts/` do not exist yet (C3, C6, C7 create them). Harmless once they
+  // do: `tsc -b` still picks up every file matched by `include` below.
+  "files": [],
+  "include": ["api", "server", "shared", "scripts"]
+}

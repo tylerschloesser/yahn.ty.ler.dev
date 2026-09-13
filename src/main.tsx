@@ -1,10 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
 
+// Placeholder until C8 ports the router, query client, and routes.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <div>yahn</div>
   </StrictMode>,
 )

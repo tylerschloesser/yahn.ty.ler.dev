@@ -1,26 +1,21 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "target": "es2023",
-    "lib": ["ES2023", "DOM"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "esnext",
-    "types": ["vite/client"],
-    "allowArbitraryExtensions": true,
-    "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "noEmit": true,
+    "types": ["vite/client"],
     "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "noEmit": true,
 
-    /* Linting */
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    // `cmk` writes CSS Module types to generated/src/**; rootDirs maps them
+    // onto the source tree so `./X.module.css` resolves to the real .d.ts
+    // instead of Vite's catch-all index signature.
+    "rootDirs": ["${configDir}", "${configDir}/generated"],
+    "plugins": [{ "name": "@css-modules-kit/ts-plugin" }]
   },
-  "include": ["src"]
+  "cmkOptions": { "enabled": true },
+  "include": ["src", "generated/src", "shared"]
 }

@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  // Explicit empty `files` suppresses
+  // TS18003 ("no inputs found") while `playwright.config.ts` and `e2e/` do not
+  // exist yet (C4 creates them). Harmless once they do: `tsc -b` still picks
+  // up every file matched by `include` below.
+  "files": [],
+  // Playwright's own config and specs. They belong to no package — `pnpm e2e`
+  // runs from the root — so this is where `tsc -b` picks them up.
+  "include": ["playwright.config.ts", "e2e"]
+}

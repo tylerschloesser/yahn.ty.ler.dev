@@ -3,23 +3,56 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "dev": "concurrently \"vite\" \"tsx watch server/dev.ts\"",
+    "dev:e2e": "HN_SOURCE=fixture concurrently \"vite\" \"tsx watch server/dev.ts\"",
+    "typecheck": "! find src generated/src shared -type f -name '*.module.css' 2>/dev/null | grep -q . || cmk -p tsconfig.app.json && tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "build": "pnpm typecheck && vite build",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && vite build",
+    "lint": "oxlint && stylelint \"src/**/*.css\" --allow-empty-input && pnpm lint:imports",
+    "lint:imports": "! grep -rnE \"from '\\.\\.?/[^']*\\.tsx?'\" api server shared scripts",
+    "e2e": "playwright test --project=chromium",
+    "e2e:live": "playwright test --project=live",
+    "hn:record": "tsx scripts/record-hn-fixtures.ts"
   },
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "@base-ui/react": "^1.8.0",
+    "@hono/node-server": "^2.1.1",
+    "@hono/zod-validator": "^0.9.1",
+    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-router": "^1.170.36",
+    "hono": "^4.13.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.4"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
+    "@css-modules-kit/codegen": "^1.4.0",
+    "@css-modules-kit/stylelint-plugin": "^1.4.0",
+    "@css-modules-kit/ts-plugin": "^1.4.0",
+    "@double-great/stylelint-a11y": "^3.5.4",
+    "@playwright/test": "^1.63.0",
+    "@tanstack/react-router-devtools": "^1.167.2",
+    "@tanstack/router-plugin": "^1.168.38",
+    "@types/node": "^24.9.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "oxlint": "^1.81.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "concurrently": "^10.0.5",
+    "oxlint": "^1.82.0",
+    "stylelint": "^17.15.0",
+    "stylelint-config-css-modules": "^4.6.0",
+    "stylelint-config-recess-order": "^7.8.0",
+    "stylelint-config-standard": "^40.0.0",
+    "stylelint-value-no-unknown-custom-properties": "^6.1.1",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.9"
   }
 }
