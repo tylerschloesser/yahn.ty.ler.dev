@@ -132,6 +132,10 @@ no context.
   `tsconfig.e2e.json` add `"files": []` to avoid TS18003. Both stay. `typecheck` temporarily skips `cmk`
   while no `*.module.css` exists (cmk errors on zero files, with no flag to suppress it). **The manager
   restores `typecheck` to exactly `cmk -p tsconfig.app.json && tsc -b` at G2**, once C8 lands module CSS.
+- **Amended in wave 1:** `lint:imports` as written exits 0 whenever one of its directories is missing,
+  because grep exits 2 and `!` negates that, so it silently passes real violations. It is now
+  `! grep -rnsE "<same pattern>" api server shared scripts | grep .`, which fails exactly when a line
+  matches.
 
 ### C2 · Context files (wave 0)
 - **Agent:** implementer → verifier. The manager reviews every rule at G0.
@@ -175,6 +179,11 @@ no context.
   Tag three structural tests `@smoke` (rows, a thread opens, health). `live/hn.spec.ts` is structural only:
   six feeds, the busiest thread opens and collapses, a user page, a search.
 - **Check:** `pnpm exec tsc -b tsconfig.e2e.json && pnpm exec playwright test --list --project=chromium | grep -E 'Total: 1[2-8] tests' && pnpm exec playwright test --list --project=chromium --grep @smoke | grep -q 'Total: 3 tests'`
+- **Amended at G1 (contract review):** (1) Every test that reads the manifest runs only when
+  `TARGET === 'local'`, and `@smoke` stays content-free. (2) The shallow-thread test asserts 1–30
+  `comment`s and one `story-title`, not flatness. (3) `webServer.command` is `pnpm dev` when
+  `HN_SOURCE=live` and `pnpm dev:e2e` otherwise, and `e2e:live` sets `HN_SOURCE=live`. (4) Stale
+  main-history comments in the specs are removed.
 
 ### C5 · Tokens and global styles (wave 1)
 - **Agent:** implementer → verifier.
@@ -208,6 +217,12 @@ no context.
   - records one search from deep's title and one with no hits.
 
   Keep the total under 2 MB.
+- **Amended at G1 (from C4's specs):** `HN_SOURCE` is `live` (default) or `fixture`. The local suite opens
+  the busiest thread on `top` page 1 and clicks the first story byline and the first comment byline.
+  So the recorded `top` list is 60 real top ids with **`deep` at rank 1**, no other page-1 story has
+  more `descendants` than `deep`, and `shallow` is on page 1. `user` (deep's author) must have at
+  least one story and one comment in their history. Also record the profile and the `all` history of
+  the first comment author in deep's preorder, which is the first `by` rendered.
 - **Check:** `pnpm exec vitest run server/hn/fixture && test $(du -sk e2e/fixtures/hn | cut -f1) -lt 2048 && node -e "const m=require('./e2e/fixtures/hn/manifest.json');process.exit(m.threads.deep&&m.threads.shallow&&m.tombstoneId&&m.user?0:1)"`
 
 ### C7 · Hono app, dev server, Vercel entry (wave 2)
@@ -264,6 +279,15 @@ no context.
   - `preview-smoke.yml`: `on: deployment_status` with `state == 'success'`, non-Production environments
     only. It runs `PLAYWRIGHT_BASE_URL=<target_url> pnpm e2e --grep @smoke` with
     `secrets.VERCEL_AUTOMATION_BYPASS_SECRET`.
+- **R1 answer (G1, cited in the researcher's report):** the GitHub integration emits `deployment_status`
+  by default (vercel.com/docs/git/vercel-for-github; Vercel now also offers `repository_dispatch`, which we
+  do not use). Success is `state == 'success'`. Vercel's example reads the URL from
+  `deployment_status.environment_url`. The exact `deployment.environment` string is undocumented, so filter
+  with `!contains(github.event.deployment.environment, 'Production')` and use
+  `environment_url || target_url`. `VERCEL_AUTOMATION_BYPASS_SECRET`, `x-vercel-protection-bypass`, and
+  `x-vercel-set-bypass-cookie: true` are current
+  (vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation).
+  The docs say nothing on whether the bypass header affects caching, so §6 item 3 stays the empirical test.
 - **Check:** `node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'))" && grep -q deployment_status .github/workflows/preview-smoke.yml && grep -q 'pnpm verify' .github/workflows/ci.yml && ! ls .github/workflows | grep -qE 'deploy|pr-preview|teardown|cleanup'`
 
 ### C11 · Context refresh and README (wave 4)

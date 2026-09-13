@@ -1,0 +1,115 @@
+/*
+ * Semantic tokens — the only layer components are allowed to reference.
+ *
+ * Hand-written HN literals, not a third-party color system: the accent orange
+ * (#ff6600), the off-white page background (#f6f6ef), the meta-text gray
+ * (#828282), and black (#000) anchor the light palette below. Dark mode is
+ * `@media (prefers-color-scheme: dark)` overriding the same custom properties
+ * — there is no `.dark` class and no pre-paint script.
+ */
+
+:root {
+  /* surfaces */
+  --color-bg: #f6f6ef;
+  --color-bg-subtle: #ecece3;
+  --color-surface: #fff;
+  --color-surface-translucent: rgb(255 255 255 / 70%);
+
+  /* borders */
+  --color-border-subtle: #e3e3d9;
+  --color-border: #d4d4c6;
+
+  /* text — HN titles are black, meta lines (points, age, comments) are gray */
+  --color-text: #828282;
+  --color-text-strong: #000;
+
+  /* accent */
+  --color-accent-surface: #fff1e0;
+  --color-accent-border: #ffb877;
+  --color-accent-text: #b34700;
+  --color-accent-solid: #f60;
+
+  /* HN's orange bar takes black text, in both themes. */
+  --color-accent-solid-text: #000;
+  --color-focus-ring: #f60;
+
+  /* The default ring is orange on orange — invisible against the bar. */
+  --color-focus-ring-on-accent: #000;
+
+  /* status */
+  --color-danger-surface: #fdecea;
+  --color-danger-border: #f0aa9e;
+  --color-danger-text: #c0392b;
+
+  /* elevation */
+  --shadow-color: rgb(0 0 0 / 15%);
+  --shadow-color-ambient: rgb(0 0 0 / 8%);
+  --shadow-1: 0 1px 2px var(--shadow-color-ambient);
+
+  /* space — 4px scale, only the steps this shell uses */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /* radius */
+  --radius-1: 0.25rem;
+  --radius-2: 0.375rem;
+
+  /*
+   * Type — HN is an information-dense feed of one-line titles, not prose, so
+   * the scale sits noticeably tighter than a reading-app scale: body text
+   * lands at 15px instead of 18px, and headings step up in small increments
+   * rather than jumping to display sizes.
+   */
+  --font-sans: system-ui, 'Segoe UI', roboto, sans-serif;
+  --font-mono: ui-monospace, consolas, monospace;
+  --text-1: 0.75rem; /* 12px — meta: points, age, comment counts */
+  --text-2: 0.8125rem; /* 13px — nav links, secondary labels */
+  --text-3: 0.9375rem; /* 15px — body */
+  --text-4: 1.0625rem; /* 17px — item titles */
+  --text-5: 1.3125rem; /* 21px — h2 */
+  --text-7: 1.75rem; /* 28px — h1 */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0em;
+
+  /* layout */
+  --layout-max-width: 60rem;
+  --icon-size-1: 1rem;
+}
+
+/*
+ * Dark set (A7): the same custom properties, overridden under the OS media
+ * query. No class toggle, no inline pre-paint script.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1a1a18;
+    --color-bg-subtle: #222220;
+    --color-surface: #292926;
+    --color-surface-translucent: rgb(41 41 38 / 70%);
+    --color-border-subtle: #38382f;
+    --color-border: #48483c;
+    --color-text: #a3a394;
+    --color-text-strong: #f2f2ea;
+    --color-accent-surface: #3a2a17;
+    --color-accent-border: #b35900;
+    --color-accent-text: #ffb066;
+    --color-accent-solid: #f60;
+    --color-accent-solid-text: #000;
+    --color-focus-ring: #ff8c3f;
+    --color-focus-ring-on-accent: #000;
+    --color-danger-surface: #3a1f1c;
+    --color-danger-border: #7a3a30;
+    --color-danger-text: #ff8f7a;
+    --shadow-color: rgb(0 0 0 / 60%);
+    --shadow-color-ambient: rgb(0 0 0 / 40%);
+  }
+}

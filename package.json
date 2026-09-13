@@ -15,9 +15,9 @@
     "build": "pnpm typecheck && vite build",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && vite build",
     "lint": "oxlint && stylelint \"src/**/*.css\" --allow-empty-input && pnpm lint:imports",
-    "lint:imports": "! grep -rnE \"from '\\.\\.?/[^']*\\.tsx?'\" api server shared scripts",
+    "lint:imports": "! grep -rnsE \"from '\\.\\.?/[^']*\\.tsx?'\" api server shared scripts | grep .",
     "e2e": "playwright test --project=chromium",
-    "e2e:live": "playwright test --project=live",
+    "e2e:live": "HN_SOURCE=live playwright test --project=live",
     "hn:record": "tsx scripts/record-hn-fixtures.ts"
   },
   "dependencies": {
