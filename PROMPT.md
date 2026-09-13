@@ -23,3 +23,5 @@ Need e2e tests that mock the anthropic layer so I don't have to pay for tests. P
 
 Research modern context management. Small CLAUDE.md with dedicated context files for various subjects/domains.
 I general claude should be instructed to create plans that delegate as much as possible to sonnet sub-agents. Plans should be scoped to what a single manager opus session can handle.
+
+Once the vercel stack is setup, we're going to teardown the AWS stack. No need for any sort of migration.
