@@ -309,6 +309,11 @@ no context.
   `vercel git connect`. Confirm Node 24.x and protection = all deployments (U1). Create a Protection Bypass
   for Automation, then `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`. No env vars are needed. **Check:**
   `vercel project inspect yahn` shows Node 24.x and the repo.
+- **Amended at M1:** `vercel project add` created the project with framework preset **Other**, whose output
+  directory is `public`. The spike project had preset **Vite**. M1 therefore also runs
+  `vercel project update yahn --framework vite`, which serves `dist/` and builds with `pnpm build`. The
+  bypass secret is read from `vercel project protection yahn --json` (`protectionBypass` key with
+  `scope: automation-bypass`). `vercel link` also wrote `.env.local` and added `.env*` to `.gitignore`.
 - **M2 — History join and PR (A1).** Merge, `git push -u origin vercel`, `gh pr create --base main`. Wait for
   `CI` and `preview-smoke`. **Check:** `gh pr checks` is all green, with CI under 3 minutes.
 - **M3 — Production.** The user merges and a verifier runs §6. Then ask about `vercel project rm yahn-spike`.
