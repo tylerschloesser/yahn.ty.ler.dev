@@ -316,6 +316,11 @@ no context.
   `scope: automation-bypass`). `vercel link` also wrote `.env.local` and added `.env*` to `.gitignore`.
 - **M2 — History join and PR (A1).** Merge, `git push -u origin vercel`, `gh pr create --base main`. Wait for
   `CI` and `preview-smoke`. **Check:** `gh pr checks` is all green, with CI under 3 minutes.
+- **Amended at M2:** the project's first Git deployment, the `vercel` push, was deployed as **Production**
+  because no production deployment existed yet. So its GitHub deployment has `environment: "Production"`,
+  and `preview-smoke` correctly skipped it. A second push to `vercel` produces the first real preview. The
+  production alias is `https://yahn-chi.vercel.app`, since `yahn.vercel.app` is taken, so §6's `P` is that
+  URL.
 - **M3 — Production.** The user merges and a verifier runs §6. Then ask about `vercel project rm yahn-spike`.
 
 ## 5. Deferred
