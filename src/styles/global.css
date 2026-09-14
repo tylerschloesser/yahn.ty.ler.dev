@@ -1,0 +1,4 @@
+/* Order matters: tokens define the custom properties reset and base consume. */
+@import './tokens.css';
+@import './reset.css';
+@import './base.css';

@@ -1,11 +1,11 @@
 ---
 paths:
-  - "packages/hn/**"
+  - "server/hn/**"
 ---
 
 # The HN data layer
 
-Loaded when you touch `packages/hn/`.
+Loaded when you touch `server/hn/`.
 
 **Read `docs/hn-api.md` first.** It is the complete, mined API reference — every endpoint, every
 field per item type, the tombstone shapes, measured latencies and request counts. Do not
@@ -14,83 +14,31 @@ re-derive any of it from the live APIs, and do not write a field list from memor
 ## Two APIs, and why both
 
 - **Firebase** (`hacker-news.firebaseio.com/v0`) is authoritative: live `score`/`descendants`,
-  and `kids` in HN's ranked display order. It has **no batch fetch** — one HTTP request per
-  item, always. A front page plus every full comment tree measured **4,636 requests**.
+  and `kids` in HN's ranked display order. It has **no batch fetch** — one HTTP request per item,
+  always. A front page plus every full comment tree measured **4,636 requests**.
 - **Algolia** (`hn.algolia.com/api/v1`) returns an entire comment tree already nested in one
-  request (`items/8863` → 0.33s, 41KB, versus 72 Firebase requests) and is the only search
-  option. It lags indexing, returns `points: null` on comments, and caps pagination at 1,000
-  hits. **10,000 requests/hour/IP**, with no `X-RateLimit-*` headers — you discover the limit by
-  being blocked, which is the argument for caching hard.
+  request and is the only search option. It lags indexing, returns `points: null` on comments,
+  and caps pagination at 1,000 hits. **10,000 requests/hour/IP**, no `X-RateLimit-*` headers.
 
 ## Comment ordering: the spike's answer
 
 **Algolia does not preserve HN's ranked order — at any depth.** Its nested `children` arrays are
-strictly ascending by id, i.e. chronological. Measured 2026-09-05 by
-`scripts/ordering-spike.mjs` against four live front-page threads (49563851, 49574167, 49570545,
-49570669, 96–389 comments each):
+strictly ascending by id (chronological), measured against four live front-page threads: 195 of
+195 multi-entry arrays were strictly ascending. Firebase `kids` agreed with HN's displayed order.
+**`getCommentSource()` defaults to `firebase`.** `hybrid` (`COMMENT_SOURCE=hybrid`) still exists
+as a fallback for when Algolia is the only thing that answers, but it is not the default: it
+trades one round trip for wrong sibling order everywhere.
 
-- **195 of 195** Algolia `children` arrays with two or more entries were strictly ascending by id
-  — top level and every depth below it.
-- HN's own displayed order is **not** ascending by id on any of the four, so ranked order is
-  genuinely different from chronological rather than coincidentally equal.
-- Firebase `kids` **agreed with HN's displayed top level**: identical on two threads, and on the
-  other two differing by a single adjacent transposition, which is live re-ranking between two
-  concurrent fetches rather than a different ordering rule.
+## Concurrency and the node cap, measured on Vercel
 
-**Therefore `getCommentSource()` defaults to `firebase`**, per the plan's stated rule ("if
-ordering is wrong at depth, flip the default to `firebase`"). The Firebase source BFSes the tree
-under a concurrency limit and a node cap; ordering is correct at every level, and the cost is
-one request per node.
-
-`hybrid` still exists behind `COMMENT_SOURCE=hybrid` and is still the right fallback when Algolia
-is the only thing that answers, but it is no longer the default: it buys one round trip at the
-price of wrong sibling order everywhere.
-
-> If you are looking for a cheaper correct option, the one this spike suggests but the plan did
-> not adopt is: build the tree from Algolia, then re-order each level from that parent's Firebase
-> `kids`. That is one request per *non-leaf* comment (48 rather than 315 on 49563851) instead of
-> one per comment. Nothing here implements it, and it is now a **worse trade than it looks** —
-> see below.
-
-## Concurrency is the lever, not request count
-
-Measured 2026-09-05 on thread 49563355 (1,603 nodes, depth 15) through the real API, varying
-`HN_TREE_CONCURRENCY` and nothing else. **These four are single samples from a laptop**, so read
-the shape, not the digits:
-
-| concurrency | 24 | 64 | 128 | 192 |
-| --- | --- | --- | --- | --- |
-| wall clock | 5.2s | 2.4s | **1.6s** | 1.5s |
-
-Flat past 128, so 128 is the default. All four returned the **identical 1,603 nodes in the
-identical order with zero upstream errors** — this widens the pipe, it does not change what the
-walk produces, which is the part that made it safe to take.
-
-**In production the same change bought about 30%, not 3.3x.** Through the deployed edge on the
-same thread, cache-busted so every request reached the origin:
-
-| | before (24) | after (128) |
-| --- | --- | --- |
-| cold, origin miss | 5.44 / 5.90 / 7.47s | median **4.06s** over 10 samples, range 3.69–4.88 |
-| warm, CloudFront hit | 23–38ms | 23–38ms |
-
-The laptop overstated it because Lambda's path to Firebase is slower and more variable than a
-developer machine's, so the fixed per-request latency dominates sooner. Still worth having: it is
-one integer and it made the first viewer of a big thread wait a third less.
-
-**Two cautions the numbers above earn.** Variance is wide — one of those ten samples took 27s on
-a Lambda cold start, against a 30s function timeout (see `.claude/rules/cdk.md`). And any future
-comparison on this endpoint needs many interleaved samples, because three-of-each is inside the
-noise; a 512-vs-1024MB Lambda experiment was run that way and proved nothing.
-
-**The cheaper-tree option is still a non-choice.** On this thread 665 of the 1,603 nodes are
-non-leaf, so Algolia-plus-`kids` would be 666 requests rather than 1,604 — 2.4x fewer — and it
-buys a source that inherits Algolia's indexing lag and has to reconcile ids present in `kids` but
-missing from Algolia's tree. **Do not build it without a measurement that beats a 4.1s median
-cold**, taken the same way.
-
-Firebase publishes no rate limit and none was hit at 192. If one ever appears, this is the first
-number to turn down, and `truncated` already exists for a walk that has to stop early.
+`HN_TREE_CONCURRENCY=128` and `HN_TREE_NODE_CAP=2000` are the defaults, both env-tunable — carried
+over unchanged (S2). Re-measured against a real Vercel function, 10 interleaved sequential
+requests each: thread 36245435 (1,609 comments) median 2.79s / max 6.49s; 47687273 (509) 1.32s /
+2.24s; 38309611 (2,530, capped at 2,000) 2.03s / 2.47s; peak RSS 293MB. Three concurrent requests
+on separate Fluid instances took 4.4s each; c=32 gave a 3.61s median, c=256 gave 2.55s (n=3). No
+errors or 429s. Vercel's function ceiling here is 300s, so the worst case measured (6.5s) has wide
+headroom — measured, not assumed, because tail latency on this endpoint is real: any future
+comparison on it needs many interleaved samples, since three-of-each is inside the noise.
 
 ## Invariants
 
@@ -98,12 +46,13 @@ number to turn down, and `truncated` already exists for a walk that has to stop 
   spike found in Algolia.
 - `descendants` is the total subtree count, not `kids.length`. Pass it through; never compute it.
 - A missing item is HTTP **200 with a `null` body**, not a 404. Mapping that to `NotFoundError` is
-  this package's job.
+  this layer's job.
 - `deleted` and `dead` only ever appear as `true`, never `false`. A deleted item loses `by`,
   `text` and `kids`; a dead one keeps `by` and `text`. **A deleted item's id still appears in its
-  parent's `kids`**, so a tree walk must tolerate a child that is a tombstone.
-- An empty-string `url` is not a url — the README's own job example carries `"url": ""`.
-- Every response carries `Cache-Control: no-cache`, so `X-Firebase-ETag: true` plus
-  `If-None-Match` is the only revalidation lever. The id lists are what it is worth using on.
+  parent's `kids`** — a tree walk must tolerate a tombstone child.
+- An empty-string `url` is not a url.
+- Every response carries `Cache-Control: no-cache`, so `X-Firebase-ETag`/`If-None-Match` is the
+  only revalidation lever. `HN_SOURCE=fixture` ignores `If-None-Match` entirely and always serves
+  the recorded body — it is a transport swap under `fetchJson`, not a mock of this layer's logic.
 - Feed list lengths are variable (500/500/200/55/137/31 observed for top/new/best/ask/show/job).
   Compute page counts from the list as fetched; never hardcode a count.

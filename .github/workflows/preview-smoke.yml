@@ -1,0 +1,56 @@
+# Runs the tagged @smoke subset of the e2e suite against a real Vercel
+# preview deployment, once the Vercel GitHub integration reports it live.
+#
+# Vercel's GitHub integration emits `deployment_status` for every deployment
+# (production and preview alike); there is no separate "preview ready" event.
+# `state == 'success'` is the point a deployment is reachable, and the
+# `!contains(..., 'Production')` filter on `deployment.environment` keeps this
+# job off production deploys — the exact string Vercel uses there is
+# undocumented, so this is deliberately a substring check rather than an
+# equality check against e.g. "Preview" (.claude/rules/vercel.md).
+#
+# `environment_url` is what Vercel's own example reads the deployed URL from;
+# `target_url` is the fallback for any event that only sets the older field.
+#
+# This account's Deployment Protection (Vercel Authentication) is on for
+# every deployment, so the run needs the bypass header to reach the preview at
+# all — `playwright.config.ts` adds it automatically once
+# `VERCEL_AUTOMATION_BYPASS_SECRET` is set in the environment
+# (.claude/rules/vercel.md, .claude/rules/testing.md).
+
+name: preview-smoke
+
+on: deployment_status
+
+concurrency:
+  group: preview-smoke-${{ github.event.deployment.id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: |
+      github.event.deployment_status.state == 'success' &&
+      !contains(github.event.deployment.environment, 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e --grep @smoke

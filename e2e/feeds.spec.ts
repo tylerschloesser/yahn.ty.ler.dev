@@ -4,15 +4,13 @@ import type { Page } from '@playwright/test'
 /**
  * The six feeds and their pagination.
  *
- * Written **before** the routes exist, so the `data-testid` set below is a
- * contract the components are built against rather than a description of
- * whatever they turned out to render. That is why Epoch 1's specs survived a
- * component rewrite untouched.
+ * The `data-testid` set below is a contract the components are built
+ * against, not a description of whatever they happen to render.
  *
- * Nothing here asserts a feed's length. `ask`, `show` and `job` were measured
- * at 55/137/31 ids and will not stay there; `pageCount` is computed from the
- * list as fetched, so the only safe assertion is that the page *agrees with
- * itself* — the status line's total matches whether Next is offered.
+ * Nothing here asserts a feed's exact length: the recorded fixture for each
+ * feed only guarantees 30+ ids (`.claude/rules/testing.md`), so the only safe
+ * assertion is that the page *agrees with itself* — the status line's total
+ * matches whether Next is offered.
  */
 
 const story = '[data-testid="story"]'
@@ -35,9 +33,7 @@ async function readStatus(page: Page): Promise<[number, number]> {
 test('the header links to every feed, and each one renders story rows', async ({ page }) => {
   await page.goto('/')
 
-  // Epoch 1 rendered these as inert spans on purpose — a Link to a route that
-  // does not exist is a type error. Routes came first; this asserts they are
-  // links now.
+  // `feeds.length + 1` counts the implicit sixth feed, top/home.
   await expect(page.getByTestId('nav-link')).toHaveCount(feeds.length + 1)
 
   for (const feed of feeds) {
@@ -87,9 +83,9 @@ test('pagination walks forward and back, and ranks keep counting', async ({ page
 })
 
 test('the last page offers no next', async ({ page }) => {
-  // `jobs` is the shortest feed (31 ids observed), so its last page is
-  // reachable in one click instead of sixteen — but the assertion reads the
-  // page count off the page rather than assuming what it is.
+  // `jobs` is recorded as the shortest feed, so its last page is reachable in
+  // few clicks — but the assertion reads the page count off the page itself
+  // rather than assuming what it is.
   await page.goto('/jobs')
   await expect(page.getByTestId('feed-title')).toBeVisible()
 

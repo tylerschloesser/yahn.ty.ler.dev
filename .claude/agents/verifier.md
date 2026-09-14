@@ -2,6 +2,7 @@
 name: verifier
 description: Independently verifies a finished chunk against its stated acceptance check and reports PASS or FAIL with evidence. Use after an implementer finishes. Give it only the chunk and the check, never the implementer's reasoning. Read-only; it never edits files.
 model: sonnet
+maxTurns: 30
 tools: Read, Grep, Glob, Bash
 ---
 

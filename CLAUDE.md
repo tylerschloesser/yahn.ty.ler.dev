@@ -1,93 +1,79 @@
 # yahn.ty.ler.dev
 
-A read-only Hacker News client, built so that the *actual* product — LLM augmentation
-(summaries, fact-checking, first-party reader mode) — can be added without reshaping the API or
-the data model. pnpm monorepo: `packages/schema` (`@yahn/schema`, the zod contract),
-`packages/hn` (`@yahn/hn`, the HN clients and comment-tree merge), `apps/api` (`@yahn/api`, Hono
-on Lambda) and `apps/web` (`@yahn/web`, Vite + React). `README.md` has the layout and the *why*.
-This file and `.claude/rules/` hold what must stay true.
+A read-only Hacker News client, built so the *actual* product — LLM augmentation (thread
+summaries, first-party reader mode) — can be added later without reshaping the API or the data
+model. Single package at the repo root, deployed on Vercel: a Hono API function (`api/index.ts`)
+and a Vite + React SPA (`src/`) served from the same project. `README.md` covers getting started
+and deploying; this file and `.claude/rules/` hold what must stay true.
 
-`infra/cdk` (`@yahn/cdk`) is one `defineSiteStacks()` call into `@tylerschloesser/cdk-core` —
-five stacks — and `.github/workflows/` deploys them.
+## Layout
 
-> Everything *except* those two directories is verifiable on `localhost` with no AWS and no
-> credentials, and that stays true: `pnpm verify`, `pnpm dev` and `pnpm e2e` never touch AWS.
+- `api/index.ts` — Vercel Function entry, exports the Hono app from `server/app.ts`
+- `server/app.ts`, `server/hn/`, `server/env.ts`, `server/dev.ts` — the API and the HN data layer
+- `shared/schema/` — the zod contract shared by server and client
+- `src/` — routes, components, styles (Vite + React, TanStack Router/Query)
+- `e2e/` — Playwright specs and recorded HN fixtures
+- `scripts/` — `record-hn-fixtures.ts`, `ordering-spike.mjs`
+- `docs/hn-api.md` — canonical HN API reference; `docs/research/` — planning reports
+- `vercel.json`, `.github/workflows/` — the Vercel Function config and CI/preview-smoke
+
+Epoch 2 adds server/enrich, server/jobs, server/store, and the job routes. None of that exists
+yet — do not build against it or reference it as if it did. Epoch 3 adds the custom-domain
+cutover and the AWS teardown (there is nothing AWS in this repo to tear down from yet).
 
 ## Context files
 
 Area rules live in `.claude/rules/` and load only when you read a file matching their `paths`.
-Planning or reviewing happens before any file is read, so **read the area's rule first** rather
-than waiting for it to load.
+Planning or reviewing happens before any file is read, so **read the area's rule first**.
 
 | Rule | Loads when you touch | Holds |
 | --- | --- | --- |
-| `typescript-config.md` | `tsconfig*.json`, `package.json`, `pnpm-workspace.yaml` | the catalog, why consumers never reference `packages/*`, deliberate version pins |
-| `hn-data.md` | `packages/hn/**` | the two APIs, the ordering spike's finding, the invariants a tree walk must hold |
-| `api.md` | `apps/api/**`, `packages/schema/**` | thin handlers, error mapping, cache headers, the enrichment/auth/DynamoDB seams |
-| `web-ui.md` | `apps/web/**` | tokens, CSS Modules, Base UI, `data-*` variants, Query-owns-cache |
-| `testing.md` | `e2e/**`, `**/*.test.ts` | offline vitest, structural-not-content Playwright, pointing it at a preview |
-| `cdk.md` | `infra/cdk/**`, `.github/workflows/**` | the five stacks and what is the package's, the committed `cdk.context.json`, the caching divergence, the preview lifecycle, the sweeper |
-| `auth.md` | `apps/api/src/auth.ts`, `AuthMenu/**`, `e2e/fixtures.ts`, `scripts/preview-login.sh` | the edge gate and why local dev is exempt, the two Cognito pools and why they are isolated, the shared Google client, the session cookie and `x-id-token`, the three `AUTH` modes, the machine user and its lockout |
+| `hn-data.md` | `server/hn/` | the two HN APIs, the ordering finding, tree-walk invariants |
+| `api.md` | `api/`, `server/app.ts`, server/routes/** (reserved, not created yet), `shared/schema/` | thin handlers, zod at the boundary, cache headers, error mapping, `looseObject` |
+| `web-ui.md` | `src/`, `index.html`, `vite.config.ts`, `stylelint.config.js` | tokens, CSS Modules, Base UI, `data-*`, Query-owns-cache, the route-tree gotcha |
+| `testing.md` | `e2e/`, `**/*.test.ts`, `playwright.config.ts`, `vitest.config.ts` | fixtures-not-live, spec-first, structural assertions, the ten-second-in-practice budget |
+| `vercel.md` | `vercel.json`, `.github/workflows/**`, `server/dev.ts` | the function entry, `.js` specifiers, env scoping, the preview-bypass header, Vercel's CDN, CI |
 
 **`docs/hn-api.md` is the canonical HN API reference** — every endpoint, every field per item
-type, the tombstone shapes, measured request counts and latencies. It was mined from the
-planning transcript so no session ever spends 25k tokens re-deriving it. **Read it. Do not
-re-derive it from the live APIs, and do not write a field list from memory** — a confidently
-wrong field there is worse than a missing one, because every later agent will trust it.
+type, tombstone shapes, measured latencies and request counts. Read it. Do not re-derive it from
+the live APIs, and do not write a field list from memory.
 
 ## Always true
 
-- **`pnpm verify` = `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.** One command, and
-  it is what every agent and every CI job runs.
-- **`pnpm dev` needs no credentials.** It runs the real API locally on :3001 and Vite on :5173,
-  and both HN APIs are public. That is deliberate and load-bearing: it is what lets a remote
-  session verify its own work before opening a PR. It does hit live HN, so be a good citizen.
-- Dependency versions live in the `catalog:` block of `pnpm-workspace.yaml`. Manifests say
-  `"catalog:"`, never a semver range.
-- `erasableSyntaxOnly` and `verbatimModuleSyntax` are on: no `enum`, no constructor parameter
-  properties (assign fields in the body), `import type` for types.
+- **`pnpm verify` = `pnpm lint && pnpm typecheck && pnpm test && vite build`.** One command; every
+  agent and CI job runs it.
+- **`pnpm dev` needs no credentials.** It runs the real API on `:3001` and Vite on `:5173`; both
+  HN APIs are public. That is what lets an agent verify its own work before reporting. It does
+  hit live HN, so be a good citizen; `pnpm dev:e2e` uses `HN_SOURCE=fixture` instead.
+- Dependency versions are plain ranges in the root `package.json` — there is no workspace and no
+  version catalog.
+- **Relative imports in `api/`, `server/`, `shared/`, `scripts/` use `.js` specifiers**, never `.ts` — a `.ts` one crashes the deployed function (`pnpm lint:imports` enforces; see `vercel.md`).
 - No formatter. Match the surrounding style: no semicolons, single quotes.
-- **vitest covers `packages/hn` and `apps/api/src/enrich`**, on purpose and nothing else: the
-  tree merge, the ordering, and the rendering of a thread into model input are the only real
-  logic here, and they are pure. Tests never touch the network.
+- **vitest covers `server/hn` and `server/app.test.ts`** — the tree merge, ordering, and cache
+  headers are the only real logic here, and they never touch the network.
+- There is no AWS anywhere in this repo, and nothing here talks to it.
 
 ## How to work
 
-Plan every non-trivial task as chunks that a cheaper model implements and a *different* cheaper
-model verifies, so the expensive model spends its context on judgment, not typing.
+Plan every non-trivial task as chunks small enough for a cheaper model to implement and a
+*different* cheaper model to verify.
 
-- A chunk is small enough to carry a **one-line acceptance check** that someone with no
-  conversation context could run. If you cannot write the check, the chunk is not specified yet.
+- A chunk needs a **one-line acceptance check** runnable with no conversation context. If you
+  cannot write the check, the chunk is not specified yet.
 - Delegate implementation to the `implementer` agent and the check to the `verifier` agent
-  (`.claude/agents/`, both sonnet). The verifier gets the chunk and its check, never the
-  implementer's reasoning, and reports PASS/FAIL with evidence without fixing anything.
-- Keep the expensive model for decomposition, judgment calls, anything touching an invariant in
-  a rule file, and review of the integrated diff.
-- A finding the current task should not absorb is neither fixed nor dropped: the **`file-issue`
-  skill** (`.claude/skills/`) files it and you carry on. `.claude/settings.json` allowlists the
-  read-only calls — `pnpm verify` and friends, `gh` reads, `aws` describes, `curl` against the
-  live site and localhost. Nothing destructive is on that list, and `cdk destroy` and
-  `delete-stack` are deliberately absent: the account also hosts thai.ler.dev's production.
-- Don't delegate a chunk smaller than its handoff, or one that only makes sense with the whole
-  conversation in view.
+  (`.claude/agents/`, both sonnet, `maxTurns: 30`). The verifier gets the chunk and its check,
+  never the implementer's reasoning, and reports PASS/FAIL with evidence. An agent added to
+  `.claude/agents/` mid-session isn't picked up by that session — it needs a fresh one.
+- A dependency the chunk needs goes in the root `package.json`, never invented ad hoc.
+- A finding outside the current task is neither fixed nor dropped: the **`file-issue`** skill
+  (`.claude/skills/`) files it and you carry on. `.claude/settings.json` allowlists read-only
+  calls — `pnpm verify` and friends, `gh` reads, `vercel` reads, `curl` against localhost and the
+  deployed hosts. Nothing destructive is on that list.
 
 ## Keeping this context current
 
-These files are a contract with the next session, and a false claim is worse than a missing one:
-an agent reading it literally will "fix" working code.
-
 - Include what is load-bearing and not derivable from the code; leave out what the code already
-  says well. Prefer pointing at a comment in the code to restating it.
-- A change that invalidates a claim in any rule fixes the rule **in the same commit**.
+  says well. A change that invalidates a claim in a rule fixes the rule in the same commit.
 - When something costs a debugging session and isn't obvious from the code, add it to the
-  matching rule. If no rule fits, add one and a row to the table above.
-- Budgets: this file under 100 lines, each rule under about 120. **`cdk.md` is exempt** — it is
-  the only rule covering two `paths` globs (`infra/cdk/**` and `.github/workflows/**`) whose
-  contents cross-reference constantly, and Epoch 3 raised its ceiling twice in one session before
-  admitting the number was the wrong control. It is ~425 and that is fine. **The real test is
-  whether a reader can find the one paragraph they need**, which headings decide, not length.
-  Split it when a workflow section stops referring to stack internals — until then, a session
-  editing `cleanup.yml` needs the IAM scope and stack naming that make it safe, and a split would
-  take those away.
-- A claim about a third party's undocumented behaviour needs a way to re-check it, not just a
-  date. `scripts/ordering-spike.mjs` is the pattern.
+  matching rule; add a new rule and a row above if none fits.
+- Budgets: this file under 100 lines, each rule under about 120.

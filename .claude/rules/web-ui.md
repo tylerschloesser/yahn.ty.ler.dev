@@ -1,100 +1,66 @@
 ---
 paths:
-  - "apps/web/src/**/*.tsx"
-  - "apps/web/src/**/*.css"
-  - "apps/web/index.html"
-  - "apps/web/vite.config.ts"
+  - "src/**"
+  - "index.html"
+  - "vite.config.ts"
   - "stylelint.config.js"
 ---
 
-# apps/web UI conventions
+# src/ UI conventions
 
-Loaded when you touch a component, a stylesheet, `index.html`, the Vite config, or the
-stylelint config.
+Loaded when you touch a component, a stylesheet, `index.html`, the Vite config, or the stylelint
+config.
 
 - **Check the current Base UI docs before writing a component** — <https://base-ui.com>. Do not
-  write Base UI from memory: the package was renamed from `@base-ui-components/react` to
-  **`@base-ui/react`** and went 1.0 in Dec 2025, so anything older is wrong about both the
-  import path and the API. Use a Base UI component where there are real interaction semantics
+  write Base UI from memory: the package is **`@base-ui/react`** (1.0+), not the older
+  `@base-ui-components/react`. Use a Base UI component where there are real interaction semantics
   (menus, disclosures, dialogs); use semantic HTML where it is already correct — nav links are
   `<ul>`/`<a>`, rules are CSS borders.
 - **Styling is CSS Modules only** (`X.module.css` beside `X.tsx`), class names camelCase because
   they are read as `styles.someClass`. Variants go on `data-*` attributes styled as
   `[data-variant='…']`, never a className map.
 - **A boolean `data-*` attribute is `data-x=""` when true and absent when false**, written
-  `{...(flag ? { 'data-x': '' } : {})}`. `data-x={true}` renders as `data-x="true"`, which the
-  CSS `[data-x]` selector still matches but a Playwright `toHaveAttribute('data-x', '')` does
-  not — so the two conventions look identical until a test disagrees with the DOM.
-- **Two token layers.** `src/styles/primitives.css` is nothing but Radix Colors `@import`s —
-  `sand` (neutral) + `orange` (accent), which gives HN's character without hardcoding
-  `#ff6600` — plus `red` and `black-alpha`. Components reference `src/styles/tokens.css`
-  (`--color-text`, `--color-accent-solid`), **never a Radix primitive** (`--sand-11`) directly.
-  Adding a hue means adding it to `importFrom` in `stylelint.config.js` too, or every `var()`
-  using it fails lint.
-- **Orange is one of Radix's bright scales.** Step 9 takes a *dark* foreground in both themes,
-  not white — which is also what real HN does. Hence `--color-accent-solid-text` and
-  `--color-focus-ring-on-accent`, both on the theme-independent `black-alpha` scale: the global
-  orange-8 focus ring is invisible against the orange-9 header bar. Don't "fix" either to a sand
-  step; sand flips with `.dark` and these must not.
-- **The type scale is deliberately tight.** HN is a dense feed of one-line titles, so body sits
-  at 15px (`--text-3`) and headings step up in small increments rather than to display sizes.
-- stylelint rejects hex/rgb/hsl on colour properties and raw px on spacing and radius
-  properties, in `*.module.css` only — `src/styles/**` is the token layer and may use literals.
-  It does **not** reject px in `border`, `width`, `height` or `outline`; hairline borders are
-  literal px and that is correct.
-- **Dark mode is Radix's `.dark` class**, set on `<html>` by the inline script in `index.html`
-  from `prefers-color-scheme`. It runs before first paint — that is what stops the flash, so
-  keep it inline and in `<head>`. Declare every semantic token under `:root` and use `.dark`
-  only for overrides, because stylelint's token check reads `:root`.
-- **Class names are type-checked.** `cmk` writes `.d.ts` into `generated/` during `typecheck`
-  and `build`; the TS plugin covers the editor, so `dev` is plain `vite`. `styles.typo` is a
-  compile error — do not add an index signature to work around it. `generated/` is gitignored
-  and `cmk` does not prune it.
+  `{...(flag ? { 'data-x': '' } : {})}`. `data-x={true}` renders `data-x="true"`, which the CSS
+  `[data-x]` selector still matches but a Playwright `toHaveAttribute('data-x', '')` does not.
+  `CommentTree` renders both independently: `data-tombstone` on any tombstone (deleted or dead)
+  plus a separate `data-dead` only when it's the dead one, for the dimmed style — two booleans on
+  the same element, not one enum.
+- **One token layer.** `src/styles/tokens.css` holds every custom property components use
+  (`--color-text`, `--color-accent`, the space and type scales, two radii) as hand-written HN
+  literals (`#ff6600`, `#f6f6ef`, `#828282`) — there is no third-party color system underneath.
+  Components reference a token, never a literal. `.root { isolation: isolate }` and
+  `body { position: relative }` are load-bearing for stacking context, not decoration.
+- **Dark mode is `@media (prefers-color-scheme: dark)` in `tokens.css`, with no pre-paint
+  script.** There is deliberately no inline theme script in `index.html` in this epoch.
+- stylelint rejects hex/rgb/hsl on colour properties and raw px on spacing/radius properties, in
+  `*.module.css` only — `src/styles/` is the token layer and may use literals. It does not
+  reject px on `border`, `width`, `height`, or `outline`.
+- **Class names are type-checked.** `cmk` writes `.d.ts` into `generated/` during `typecheck` and
+  `build`; `styles.typo` is a compile error — do not add an index signature to work around it.
+  `generated/` is gitignored and not pruned by `cmk`. `cmk` also errors if it finds zero
+  `*.module.css` files, with no flag to suppress it — moot while `src/components/` has plenty,
+  but it will bite again if they're ever all removed at once. The `PreToolUse` hook in
+  `.claude/settings.json` refuses `Edit`/`Write` on it and on `src/routeTree.gen.ts` directly —
+  regenerate them, don't hand-edit them.
 - **Accessibility is a requirement, not a final pass.** oxlint's `jsx-a11y` plugin runs at
-  `correctness: error`, so failures break CI. Focus styling uses `:focus-visible`, never
-  `:focus`.
+  `correctness: error`. Focus styling uses `:focus-visible`, never `:focus`.
 - Routes are file-based under `src/routes/`. `src/routeTree.gen.ts` is generated by the Vite
   plugin but **committed**, because `tsc -b` runs before `vite build`; it is ignored by oxlint.
-  **So adding a route file does not make `pnpm typecheck` see it** — typecheck reads the
-  committed tree, and every `Link` and `createFileRoute` for the new path fails with
-  `not assignable to keyof FileRoutesByPath` until something runs Vite. Regenerate with
-  `pnpm --filter @yahn/web exec vite build` (or just leave `pnpm dev` running), *then*
-  typecheck. Chasing those errors as if they were real is a guaranteed dead end.
-  Route files export both `Route` and a component, so `react/only-export-components` is off for
-  that directory. A `Link` to a route that does not exist yet is a **type error** — render an
-  inert element, not a broken link.
-- **Vite plugin order matters.** `tanstackRouter()` must come before `react()` or generated
-  route modules are not transformed.
-- **The router keeps the previous route mounted while a loader is in flight.** So the URL
-  changes a beat before the old page stops being what is on screen — a Playwright assertion
-  that waits on the URL and then queries the DOM will find the *previous* route's elements.
-  Wait on something only the new route renders.
-- **External links do not open in a new tab.** HN opens them in the same tab, and a `_blank`
-  that does not announce itself is an a11y failure. `rel="noreferrer"` yes, `target` no.
+  **Adding a route file does not make `pnpm typecheck` see it** until something runs Vite —
+  regenerate with `vite build` (or leave `pnpm dev` running), then typecheck. Route files export
+  both `Route` and a component, so `react/only-export-components` is off for that directory. A
+  `Link` to a route that does not exist yet is a type error — render an inert element instead.
+- **Vite plugin order matters**: `tanstackRouter({ target: 'react', autoCodeSplitting: true })`
+  must come before `react()`.
+- **The router keeps the previous route mounted while a loader is in flight.** The URL changes a
+  beat before the old page stops being what is on screen — wait on something only the new route
+  renders, not on the URL.
+- **External links do not open in a new tab.** HN opens them in the same tab; `rel="noreferrer"`
+  yes, `target` no.
 - **TanStack Query owns all caching.** Router `loader`s call `queryClient.ensureQueryData` and
-  components use `useSuspenseQuery`; `defaultPreloadStaleTime: 0` is what keeps there being
-  exactly one cache rather than the router keeping a second. **`AuthMenu` is the deliberate
-  exception**: it uses plain `useQuery` for `configQueryOptions`/`meQueryOptions`, because a
-  suspending header would hold up the whole shell to answer "who is signed in", which is not
-  worth blocking a page of stories on. It renders its signed-out state while those are pending.
-  Off local that state is now **nothing at all**, not a sign-in button: the edge gate means the
-  app is only ever reached by someone already signed in, so there is nobody to offer a button to.
-  The dev-login form is the one signed-out affordance left, and it is local-only.
-- **Every call to `/api` or `/events` goes through `apiFetch`, never a bare `fetch`.** It comes
-  from `@tylerschloesser/cdk-core/auth/browser` and is where `x-id-token` is attached, so no
-  component ever handles a token. Deployed, that header is usually *empty* and the edge's
-  `HttpOnly` session cookie is what authenticates — `apiFetch` stays because it is still the
-  choke point and because the header path is how a machine caller signs in
-  (`.claude/rules/auth.md`). `src/api.ts`'s `getJson` is the choke point for the five typed
-  fetchers; `ThreadSummary` calls it directly for the one SSE stream. It takes the same
-  `(input, init)` as `fetch` and passes `init` straight through, abort signal included.
-- **Vite serves `/__config.json` locally**, from the `localConfigJson()` plugin in
-  `vite.config.ts`, because a real deploy writes that file into the asset prefix and the bundle
-  reads its environment at runtime rather than at build time — one CI build serves prod and every
-  preview. It is registered in **both** `configureServer` and `configurePreviewServer`, and the
-  local body has no `auth` key, which is what makes the dev-login box the only sign-in locally.
-- The dev server proxies `/api` to **`http://localhost:3001`, a real local backend** — not
-  production, unlike thai.ler.dev. `pnpm dev` runs both. This is deliberate and load-bearing:
-  it is what lets a session verify its own work before opening a PR, and it is free because
-  both HN APIs are public and unauthenticated.
+  components use `useSuspenseQuery`; `defaultPreloadStaleTime: 0` keeps there being exactly one
+  cache. Every fetch goes through plain `fetch` in `src/api.ts` — there is no `apiFetch` wrapper
+  and no auth header in this epoch.
+- The dev server proxies `/api` to `http://localhost:3001`, a real local backend, not a deployed
+  one. `pnpm dev` runs both; that is what lets a session verify its own work before reporting.
 - **English only.** No i18n framework; copy is hardcoded English and `<html lang="en">`.

@@ -1,0 +1,102 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+}
+
+.list[data-nested] {
+  padding-inline-start: var(--space-4);
+  margin-block-start: var(--space-3);
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--text-1);
+  color: var(--color-text);
+}
+
+/* Reset to look like text, not a button, while keeping the global
+   :focus-visible ring — see src/styles/base.css. */
+.toggle {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.deadMarker,
+.hiddenCount {
+  font-style: italic;
+}
+
+.author {
+  font-weight: var(--weight-medium);
+  color: var(--color-text-strong);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+@media (hover: hover) {
+  .author:hover {
+    color: var(--color-accent-text);
+    text-decoration: underline;
+  }
+}
+
+.body {
+  font-size: var(--text-3);
+  line-height: var(--leading-normal);
+  color: var(--color-text-strong);
+}
+
+.body :global(p) {
+  margin-block: var(--space-2);
+}
+
+.body :global(pre) {
+  padding: var(--space-2);
+  overflow-x: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-1);
+}
+
+.body :global(a) {
+  color: var(--color-accent-text);
+}
+
+.tombstoneText {
+  margin: 0;
+  font-size: var(--text-3);
+  font-style: italic;
+  color: var(--color-text);
+}
+
+/*
+ * `dead` keeps its author and body — HN still has them, dropping them would
+ * throw away content we already fetched — so it reads as dimmed rather than
+ * as an error. `--color-text` against `--color-text-strong` is the axis:
+ * the same one `.tombstoneText` above already uses, not a danger color.
+ */
+[data-dead] .author,
+[data-dead] .body {
+  color: var(--color-text);
+}

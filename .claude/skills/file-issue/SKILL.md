@@ -49,7 +49,7 @@ Observed versus expected, with the real output, error text, or request line.
 
 ## How to reproduce
 Exact steps or command. In this repo that is almost always `pnpm verify`, a single
-`pnpm e2e -- e2e/<file>.spec.ts`, or a `curl` against `pnpm dev` on :3001 — all three
+`pnpm e2e e2e/<file>.spec.ts`, or a `curl` against `pnpm dev` on `:3001` — all three
 need no credentials, so whoever picks the issue up can reproduce it immediately.
 
 ## Where
@@ -87,8 +87,8 @@ If `gh issue create` rejects a label, create it and retry:
 gh label create claude --description "Filed by Claude Code" --color 6f42c1
 ```
 
-The repo already has `bug`, `enhancement`, `documentation` and `accessibility`; `claude` is
-the one that has to be created on first use.
+`bug`, `enhancement`, and `documentation` are expected to already exist on this repo; `claude`
+is the one that may need creating on first use.
 
 ## 4. Report and resume
 

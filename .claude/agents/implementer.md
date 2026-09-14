@@ -2,6 +2,8 @@
 name: implementer
 description: Implements one well-specified chunk of work that arrives with a one-line acceptance check. Use to delegate scoped implementation so the main session keeps its context for design and review. Not for open-ended design, and not for a change that has no stated check yet.
 model: sonnet
+maxTurns: 30
+tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
 You implement exactly one chunk of a larger plan in this repository.
@@ -24,8 +26,8 @@ Rules:
   include the output.
 - Do not commit, stage, or otherwise touch git state.
 - Do not add a dependency, a test framework, or a file the chunk did not call for. If a
-  dependency is genuinely required, it goes in the `catalog:` block of
-  `pnpm-workspace.yaml` and you say so in the report.
+  dependency is genuinely required, it goes in the root `package.json` and you say so in the
+  report.
 - `pnpm dev` needs no credentials — both HN APIs are public — but it does hit live HN. Start it
   only if the chunk asks you to, and stop it when you are done.
 

@@ -1,57 +1,90 @@
-import { expect, test } from './fixtures.js'
+import { expect, test, TARGET } from './fixtures.js'
+import { readManifest } from './hn-fixture.js'
 
 /**
  * Search and author profiles, asserted structurally.
  *
- * Both run against live Algolia. A query's *results* change daily, so nothing
- * here asserts what came back — only that a query produces rows shaped like
- * stories, and that an author page produces a profile plus a history.
- *
- * `pg` is the one HN username safe to hard-code: it is Paul Graham's, the
- * account has existed since HN did, and it has thousands of both stories and
- * comments. Any *other* username would be a content assertion in disguise.
+ * This suite runs against `HN_SOURCE=fixture` (`.claude/rules/testing.md`):
+ * an unrecorded URL throws `UpstreamError`, surfacing as a 502. So every
+ * test that needs a query or username guaranteed to have a particular
+ * outcome reads it from the recorded manifest (`./hn-fixture.ts`) rather
+ * than inventing one here — `search.query` is recorded to return rows,
+ * `search.emptyQuery` to return none, and `user` to have a profile and a
+ * history — and runs for `TARGET === 'local'` only, since a manifest id is
+ * only guaranteed to match the local fixtured server. Nothing asserts what
+ * those rows or that profile *say*, only their shape.
  */
 
 const story = '[data-testid="story"]'
 
-test('the header search box runs a query and lists story rows', async ({ page }) => {
-  await page.goto('/')
+test.describe(() => {
+  test.skip(TARGET !== 'local', 'fixture manifest ids are only guaranteed to match the local fixtured server')
 
-  await page.getByTestId('search-input').fill('rust')
-  await page.getByTestId('search-input').press('Enter')
+  test('the header search box runs a query and lists story rows', async ({ page }) => {
+    const { search } = readManifest()
 
-  await expect(page).toHaveURL(/\/search\?/)
-  // The heading, not the rows: the feed is still mounted while the search
-  // loader is in flight.
-  await expect(page.getByTestId('search-heading')).toContainText('rust')
-  // The box is the control that produced this page — it must show what
-  // produced it, not go blank the moment the query lands in the URL.
-  await expect(page.getByTestId('search-input')).toHaveValue('rust')
+    await page.goto('/')
 
-  const rows = page.locator(story)
-  await expect(rows.first()).toBeVisible()
-  // A one-word query against all of HN always has more than one page of hits,
-  // so the result list is full rather than a stub.
-  await expect(rows).toHaveCount(30)
-  await expect(rows.locator('[data-testid="story-title"]')).toHaveCount(30)
+    await page.getByTestId('search-input').fill(search.query)
+    await page.getByTestId('search-input').press('Enter')
 
-  // A second search, then back: the box has to track navigation, not just
-  // the initial load.
-  await page.getByTestId('search-input').fill('python')
-  await page.getByTestId('search-input').press('Enter')
-  await expect(page.getByTestId('search-heading')).toContainText('python')
+    await expect(page).toHaveURL(/\/search\?/)
+    // The heading, not the rows: the feed is still mounted while the search
+    // loader is in flight.
+    await expect(page.getByTestId('search-heading')).toContainText(search.query)
+    // The box is the control that produced this page — it must show what
+    // produced it, not go blank the moment the query lands in the URL.
+    await expect(page.getByTestId('search-input')).toHaveValue(search.query)
 
-  await page.goBack()
-  await expect(page.getByTestId('search-heading')).toContainText('rust')
-  await expect(page.getByTestId('search-input')).toHaveValue('rust')
-})
+    const rows = page.locator(story)
+    await expect(rows.first()).toBeVisible()
+    await expect(rows.locator('[data-testid="story-title"]')).toHaveCount(await rows.count())
 
-test('a query with no hits says so instead of rendering an empty list', async ({ page }) => {
-  // Algolia tokenizes, so a nonsense *word* is what returns nothing — a
-  // nonsense phrase would match on its parts.
-  await page.goto('/search?q=zzqqxxjjvvwwkk')
-  await expect(page.getByTestId('search-empty')).toBeVisible()
-  await expect(page.locator(story)).toHaveCount(0)
+    // A second search, then back: the box has to track navigation, not just
+    // the initial load. The recorded empty query is a convenient second value
+    // that is guaranteed to differ in outcome (no rows) from the first.
+    await page.getByTestId('search-input').fill(search.emptyQuery)
+    await page.getByTestId('search-input').press('Enter')
+    await expect(page.getByTestId('search-empty')).toBeVisible()
+
+    await page.goBack()
+    await expect(page.getByTestId('search-heading')).toContainText(search.query)
+    await expect(page.getByTestId('search-input')).toHaveValue(search.query)
+  })
+
+  test('a query with no hits says so instead of rendering an empty list', async ({ page }) => {
+    const { search } = readManifest()
+
+    await page.goto(`/search?q=${encodeURIComponent(search.emptyQuery)}`)
+    await expect(page.getByTestId('search-empty')).toBeVisible()
+    await expect(page.locator(story)).toHaveCount(0)
+  })
+
+  test('an author history filters to stories and to comments', async ({ page }) => {
+    const { user } = readManifest()
+
+    await page.goto(`/user/${user}`)
+    await expect(page.getByTestId('user-karma')).toBeVisible()
+    await expect(page.getByTestId('author-item').first()).toBeVisible()
+
+    // Every row on a filtered tab is of that kind. `data-kind` on the row is the
+    // assertion surface because the visible difference between the two is only
+    // styling, and counting the matching rows against *all* rows is what proves
+    // the filter narrowed rather than that at least one row happens to match.
+    for (const [label, kind] of [
+      ['comments', 'comment'],
+      ['stories', 'story'],
+    ] as const) {
+      await page.getByTestId('author-filter').filter({ hasText: label }).click()
+      await expect(page).toHaveURL(new RegExp(`type=${kind}`))
+
+      const rows = page.getByTestId('author-item')
+      await expect(rows.first()).toBeVisible()
+      await expect(page.locator(`[data-testid="author-item"][data-kind="${kind}"]`)).toHaveCount(
+        await rows.count(),
+      )
+    }
+  })
 })
 
 test('a story byline opens the author profile and their history', async ({ page }) => {
@@ -67,28 +100,4 @@ test('a story byline opens the author profile and their history', async ({ page 
   // Whoever is on the front page has at least the submission that put them
   // there, so a history row is guaranteed without asserting how many.
   await expect(page.getByTestId('author-item').first()).toBeVisible()
-})
-
-test('an author history filters to stories and to comments', async ({ page }) => {
-  await page.goto('/user/pg')
-  await expect(page.getByTestId('user-karma')).toBeVisible()
-  await expect(page.getByTestId('author-item').first()).toBeVisible()
-
-  // Every row on a filtered tab is of that kind. `data-kind` on the row is the
-  // assertion surface because the visible difference between the two is only
-  // styling, and counting the matching rows against *all* rows is what proves
-  // the filter narrowed rather than that at least one row happens to match.
-  for (const [label, kind] of [
-    ['comments', 'comment'],
-    ['stories', 'story'],
-  ] as const) {
-    await page.getByTestId('author-filter').filter({ hasText: label }).click()
-    await expect(page).toHaveURL(new RegExp(`type=${kind}`))
-
-    const rows = page.getByTestId('author-item')
-    await expect(rows.first()).toBeVisible()
-    await expect(page.locator(`[data-testid="author-item"][data-kind="${kind}"]`)).toHaveCount(
-      await rows.count(),
-    )
-  }
 })

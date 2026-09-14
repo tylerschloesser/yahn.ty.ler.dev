@@ -1,131 +1,40 @@
 # yahn.ty.ler.dev
 
-A read-only Hacker News client. Near-vanilla HN today — front page, comment threads — built so
-that the thing it exists for can be added later without reshaping anything: LLM augmentation.
-Article and comment summaries, fact-checking, a first-party reader mode.
+A read-only Hacker News client: a Hono API (`api/index.ts`, `server/`) and a Vite + React SPA
+(`src/`), one package, deployed on Vercel. `CLAUDE.md` and `.claude/rules/` hold the conventions.
 
-Nothing about that is built yet. What is built is the shape that makes it cheap.
+## Develop
 
-## Quick start
-
-```bash
+```
 pnpm install
-pnpm dev        # api on :3001, web on :5173 — no credentials needed
-pnpm verify     # lint, typecheck, test, build
-pnpm e2e        # Playwright; boots its own dev servers
+pnpm dev
 ```
 
-Both Hacker News APIs are public and unauthenticated, so `pnpm dev` runs the *real* backend
-locally with nothing mocked. There is no secret to obtain and no deployed environment to point
-at. That is the property that lets an agent — or a new contributor — verify a change end to end
-before opening a PR.
+Runs the real API on `:3001` and Vite on `:5173`. No credentials needed — both HN APIs are
+public — but it does hit live HN, so be a good citizen with it.
 
-## Layout
+## Test
 
 ```
-apps/web       @yahn/web      Vite + React 19, TanStack Router + Query, CSS Modules
-apps/api       @yahn/api      Hono lambdalith — routing, validation, cache headers
-packages/hn    @yahn/hn       Firebase + Algolia clients, comment-tree merge. Pure, tested.
-packages/schema @yahn/schema  the zod contract, shared by web and api
-docs/hn-api.md                the complete HN API reference
-e2e/                          one Playwright spec, structural assertions only
+pnpm verify   # lint, typecheck, unit tests, build — what CI runs first
+pnpm e2e      # Playwright against recorded HN fixtures (HN_SOURCE=fixture), ~10s
+pnpm e2e:live # structural canary (e2e/live/) against live HN
 ```
 
-`packages/hn` is separate from `apps/api` so the Lambda stays genuinely thin and the interesting
-logic — tree merge, ordering, node caps, retries — is pure and testable without a server. Every
-package is consumed as **raw TypeScript source** through its `exports` map: no build output, no
-`composite`, no project references between them.
+## Fixtures
 
-## The HN data problem
-
-The official Firebase API has **no batch fetch**. One HTTP request per item, always. A front
-page plus every full comment tree measured **4,636 requests**; one thread alone was 1,461.
-
-The Algolia HN Search API returns an entire comment tree already nested in a single request
-(0.33s, 41KB, against 72 Firebase requests for the same thread) and is the only way to search.
-But it lags indexing, reports `points: null` on comments, and — measured, not assumed — orders
-its nested `children` **chronologically**, not in HN's ranked display order.
-
-So neither API is sufficient alone, and the choice between them is a seam rather than a
-decision baked into call sites:
-
-```ts
-// packages/hn/src/tree/index.ts
-export function getCommentSource(): CommentSource
-```
-
-The default is `firebase`, because ordering is the thing a reader notices. `COMMENT_SOURCE=hybrid`
-takes Algolia's whole tree in one request instead, and is the right fallback when Algolia is the
-only thing answering. `scripts/ordering-spike.mjs` is the measurement that decided it; re-run it
-rather than re-deriving the answer.
-
-The full reference — every endpoint, every field per item type, the deleted/dead tombstone
-shapes, ETag semantics, rate limits, and the measurements above — is in `docs/hn-api.md`.
-
-## What makes the LLM work cheap later
-
-Four properties, all free to build now and expensive to retrofit:
-
-1. **An `enrichments` slot on every item**, always absent today. Adding the first summary
-   changes no response shape and no component contract.
-2. **A `contentKey` on every item** — `sha256(url ?? text).slice(0, 16)`. The key an enrichment
-   is cached against: a summary stays valid exactly as long as the content it summarized is
-   unchanged. Impossible to backfill consistently later.
-3. **The read path is GET-only and deterministic**, so CloudFront caches it hard. Enrichment
-   is a different Lambda on a different behavior — it streams, and response streaming is an
-   invoke-mode property of a Function URL that is fixed at creation. It lives at
-   `GET /events/v1/enrich/**`.
-4. **The API learns who is calling from exactly one function**, `getAuthUser()`. Cognito has
-   since landed behind it, and nothing else in the API changed — which is the property, not the
-   auth. Per-user enrichments partition on whatever it returns.
-
-## API
+The e2e suite runs against `e2e/fixtures/hn/*.json`, recorded HN responses, not live traffic.
+Re-record them after a schema or spec change:
 
 ```
-GET /api/health
-GET /api/v1/me                     the caller's Cognito identity, or 401
-GET /api/v1/feeds/:feed?page=1     feed ∈ top|new|best|ask|show|job
-GET /api/v1/items/:id
-GET /api/v1/users/:id
-GET /api/v1/search?q=&page=&sort=relevance|date
-GET /events/v1/enrich/thread/:id  streams SSE
+pnpm hn:record
 ```
 
-Same-origin under one CloudFront distribution, so no CORS and no preflight. **The whole site is
-behind a Google sign-in at the CloudFront edge**: a request with no valid session cookie is
-answered with a redirect to Cognito before it reaches an origin, so none of the endpoints above
-are reachable anonymously. Any Google account gets in — there is no allowlist. The credential is
-an `HttpOnly` cookie a CloudFront Function verifies; a machine caller can present a Cognito ID
-token in `x-id-token` instead, never `Authorization`, which CloudFront's origin access control
-overwrites with its own SigV4 signature. `pnpm dev` has no CloudFront and so is not gated. The origin sets short
-`Cache-Control` with `stale-while-revalidate`;
-CloudFront honors it, which is how a cached front page becomes one edge hit instead of 31 HN
-requests.
+See `.claude/skills/record-hn-fixtures/SKILL.md` for what it captures and when a re-record is
+actually needed.
 
-## Deployment
+## Deploy
 
-Live at **https://yahn.ty.ler.dev**. One CloudFront distribution serves the static app from S3
-and `/api/*` from a Lambda function URL, so the API is same-origin: no CORS and no preflight.
-The infrastructure is `infra/cdk/bin/app.ts`, one
-`defineSiteStacks()` call into `@tylerschloesser/cdk-core`, the package extracted from this site
-and thai.ler.dev.
-
-`/api/*` is cached at the edge, which is where the Lambda earns its keep — a repeat front page
-is one CloudFront hit instead of 31 requests to Hacker News, measured at 1.23s cold against
-0.03s warm. The origin decides: feeds send `max-age=30, stale-while-revalidate=300`, items
-`max-age=60`, and every non-2xx sends `no-store` so an upstream blip is never pinned at an edge.
-
-Every pull request from this repo gets a preview at **https://pr-\<N>.preview.yahn.ty.ler.dev**.
-It is not a clone of production but one shared preview distribution (from
-`@tylerschloesser/cdk-core`) that routes by hostname to that PR's own Lambdas and its own slice
-of a shared bucket, so a preview deploys in well under two minutes rather than the six a full
-stack clone took. It is tested with the same Playwright spec, commented on the PR with its
-timings, and torn down when the PR closes. Prod and previews share one certificate with SANs
-`yahn.ty.ler.dev` and `*.preview.yahn.ty.ler.dev`. `.claude/rules/cdk.md` has the details.
-
-## Conventions
-
-Adopted wholesale from [thai.ler.dev](https://thai.ler.dev): oxlint + stylelint and no
-formatter, no semicolons, single quotes, a two-layer CSS token system, and a dependency catalog
-that manifests reference as `"catalog:"` rather than a range. `CLAUDE.md` and `.claude/rules/`
-carry the constraints an agent needs; this file carries the story for people.
+Vercel's Git integration deploys every push to this repo; the production branch is `main`. Every
+deployment, production included, sits behind Vercel Authentication, so a remote check needs
+`x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET` — see `.claude/rules/vercel.md`.

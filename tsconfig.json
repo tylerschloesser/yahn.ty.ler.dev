@@ -1,11 +1,9 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/schema" },
-    { "path": "./packages/hn" },
-    { "path": "./apps/api" },
-    { "path": "./apps/web" },
-    { "path": "./infra/cdk" },
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.server.json" },
+    { "path": "./tsconfig.node.json" },
     { "path": "./tsconfig.e2e.json" }
   ]
 }

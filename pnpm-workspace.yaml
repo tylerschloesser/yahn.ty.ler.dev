@@ -1,74 +1,12 @@
-packages:
-  - apps/*
-  - infra/*
-  - packages/*
-
-catalogMode: prefer
-
-catalog:
-  # web
-  react: ^19.2.8
-  react-dom: ^19.2.8
-  '@types/react': ^19.2.18
-  '@types/react-dom': ^19.2.4
-  vite: ^8.2.2
-  '@vitejs/plugin-react': ^6.1.1
-  '@tanstack/react-router': ^1.170.32
-  '@tanstack/router-plugin': ^1.168.35
-  '@tanstack/react-query': ^5.102.8
-  '@tanstack/react-router-devtools': ^1.167.1
-  '@base-ui/react': ^1.7.0
-  '@radix-ui/colors': ^3.0.0
-  # styling: typed CSS modules + stylelint
-  '@css-modules-kit/codegen': ^1.4.0
-  '@css-modules-kit/ts-plugin': ^1.4.0
-  '@css-modules-kit/stylelint-plugin': ^1.4.0
-  stylelint: ^17.14.1
-  stylelint-config-standard: ^40.0.0
-  stylelint-config-css-modules: ^4.6.0
-  stylelint-config-recess-order: ^7.8.0
-  '@double-great/stylelint-a11y': ^3.5.2
-  stylelint-value-no-unknown-custom-properties: ^6.1.1
-  # api
-  hono: ^4.13.7
-  # enrichment (Epoch 4). Pinned to the same versions thai.ler.dev runs, which
-  # is where the Anthropic integration this one copies was proven.
-  '@anthropic-ai/sdk': ^0.124.0
-  '@aws-sdk/client-dynamodb': ^3.1127.0
-  '@aws-sdk/lib-dynamodb': ^3.1127.0
-  '@aws-sdk/client-secrets-manager': ^3.1127.0
-  '@hono/zod-validator': ^0.9.1
-  '@hono/node-server': ^2.1.1
-  '@types/aws-lambda': ^8.10.163
-  # infra (Epoch 2 — catalogued now so the versions are settled)
-  aws-cdk-lib: ^2.268.0
-  aws-cdk: ^2.1140.0
-  constructs: ^10.8.1
-  # Not infra-only: infra/cdk builds the stacks with it, apps/api verifies ID tokens
-  # through its `auth/server` export, and apps/web drives the browser flow through
-  # `auth/browser`. One version for all three, which is the point of the catalog.
-  '@tylerschloesser/cdk-core': ^0.2.2
-  # shared
-  typescript: ~6.0.3
-  zod: ^4.5.4
-  '@types/node': ^24.13.3
-  oxlint: ^1.81.0
-  esbuild: ^0.28.2
-  tsx: ^4.20.3
-  vitest: ^4.1.11
-  '@playwright/test': ^1.63.0
-
 allowBuilds:
-  # transitive dep of the aws-cdk CLI; its postinstall links the platform binary
   esbuild: true
-
 minimumReleaseAgeExclude:
-  - '@anthropic-ai/sdk@0.124.0'
-  - '@aws-sdk/client-dynamodb@3.1127.0'
-  - '@aws-sdk/client-secrets-manager@3.1127.0'
-  - '@aws-sdk/lib-dynamodb@3.1127.0'
-  - '@playwright/test@1.63.0'
-  - hono@4.13.7
-  - playwright-core@1.63.0
-  - playwright@1.63.0
-  - '@tylerschloesser/cdk-core@0.2.2'
+  - '@double-great/stylelint-a11y@3.5.4'
+  - '@tanstack/history@1.162.4'
+  - '@tanstack/react-router-devtools@1.167.2'
+  - '@tanstack/react-router@1.170.36'
+  - '@tanstack/router-core@1.171.30'
+  - '@tanstack/router-devtools-core@1.168.2'
+  - '@tanstack/router-generator@1.167.36'
+  - '@tanstack/router-plugin@1.168.38'
+  - zod@4.6.4

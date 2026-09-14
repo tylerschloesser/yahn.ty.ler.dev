@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc", "jsx-a11y"],
-  "ignorePatterns": ["apps/web/src/routeTree.gen.ts"],
+  "ignorePatterns": ["src/routeTree.gen.ts"],
   "categories": {
     "correctness": "error"
   },
@@ -20,7 +20,7 @@
       }
     },
     {
-      "files": ["apps/web/src/routes/**"],
+      "files": ["src/routes/**"],
       "rules": {
         // A file route exports both `Route` and its component by design, so the
         // fast-refresh warning is never actionable here.

@@ -4,27 +4,20 @@
     "allow": [
       "Bash(pnpm verify)",
       "Bash(pnpm lint)",
-      "Bash(pnpm lint:fix)",
       "Bash(pnpm typecheck)",
       "Bash(pnpm test)",
       "Bash(pnpm build)",
       "Bash(pnpm e2e)",
       "Bash(pnpm e2e:*)",
       "Bash(pnpm install)",
-      "Bash(pnpm exec tsc:*)",
-      "Bash(pnpm exec oxlint:*)",
-      "Bash(pnpm exec stylelint:*)",
-      "Bash(pnpm exec vitest:*)",
-      "Bash(pnpm exec playwright:*)",
-      "Bash(pnpm -r:*)",
-      "Bash(pnpm --filter:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm exec *)",
 
       "Bash(git status)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git show:*)",
       "Bash(git ls-files:*)",
-      "Bash(git ls-remote:*)",
       "Bash(git branch:*)",
 
       "Bash(gh pr list:*)",
@@ -39,35 +32,37 @@
       "Bash(gh run view:*)",
       "Bash(gh variable list:*)",
 
-      "Bash(curl -sS https://yahn.ty.ler.dev/*)",
-      "Bash(curl -sS https://*.preview.yahn.ty.ler.dev/*)",
-      "Bash(curl -sS http://localhost:3001/*)",
-      "Bash(curl -sS http://localhost:5173/*)",
+      "Bash(vercel env pull:*)",
+      "Bash(vercel inspect:*)",
+      "Bash(vercel ls:*)",
 
-      "Bash(aws cloudformation describe-stacks:*)",
-      "Bash(aws cloudformation list-stacks:*)",
-      "Bash(aws cloudformation describe-stack-events:*)",
-      "Bash(aws acm list-certificates:*)",
-      "Bash(aws acm describe-certificate:*)",
-      "Bash(aws route53 list-resource-record-sets:*)",
-      "Bash(aws iam simulate-principal-policy:*)",
-      "Bash(aws sts get-caller-identity:*)",
-      "Bash(aws ssm get-parameter:*)",
-      "Bash(aws cognito-idp describe-user-pool-client:*)",
-      "Bash(aws cognito-idp initiate-auth:*)",
-      "Bash(aws secretsmanager get-secret-value --region us-east-1 --secret-id yahn.ty.ler.dev/preview-machine-user:*)",
-      "Bash(scripts/preview-login.sh:*)",
-      "Bash(aws cloudfront-keyvaluestore describe-key-value-store:*)",
-      "Bash(aws cloudfront-keyvaluestore list-keys:*)",
-      "Bash(pnpm --filter @yahn/cdk exec cdk diff:*)",
-      "Bash(pnpm --filter @yahn/cdk exec cdk list:*)",
-      "Bash(pnpm --filter @yahn/cdk exec cdk synth:*)",
-      "Bash(pnpm --filter @yahn/cdk exec cdk-core sweep --site yahn.ty.ler.dev --stack-prefix Yahn --repo tylerschloesser/yahn.ty.ler.dev --dry-run)",
+      "Bash(curl -sS http://localhost:5173/*)",
+      "Bash(curl -sS http://localhost:3001/*)",
+      "Bash(curl -sSI http://localhost:5173/*)",
+      "Bash(curl -sSI http://localhost:3001/*)",
+      "Bash(curl -sS https://yahn.vercel.app/*)",
+      "Bash(curl -sSI https://yahn.vercel.app/*)",
+      "Bash(curl -sS https://*.vercel.app/*)",
+      "Bash(curl -sSI https://*.vercel.app/*)",
 
       "WebFetch(domain:base-ui.com)",
       "WebFetch(domain:tanstack.com)",
       "WebFetch(domain:hn.algolia.com)",
+      "WebFetch(domain:vercel.com)",
       "WebFetch(domain:github.com)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);const p=(j.tool_input&&j.tool_input.file_path)||'';if(p.includes('/generated/')||p.startsWith('generated/')||p.endsWith('src/routeTree.gen.ts')){console.error('Blocked: '+p+' is generated; do not Edit/Write it directly.');process.exit(2)}process.exit(0)}catch(e){process.exit(0)}})\""
+          }
+        ]
+      }
     ]
   }
 }

@@ -18,22 +18,11 @@ export default {
     '@css-modules-kit/stylelint-plugin',
   ],
   rules: {
-    // Every var() must resolve to a token we actually define. `importFrom` does
-    // not follow @import, so the Radix scales primitives.css pulls in are listed
-    // explicitly; the -dark files declare the same names, so light is enough.
+    // Every var() must resolve to a token we actually define.
     'csstools/value-no-unknown-custom-properties': [
       true,
       {
-        importFrom: [
-          'apps/web/src/styles/tokens.css',
-          'apps/web/node_modules/@radix-ui/colors/sand.css',
-          'apps/web/node_modules/@radix-ui/colors/sand-alpha.css',
-          'apps/web/node_modules/@radix-ui/colors/orange.css',
-          'apps/web/node_modules/@radix-ui/colors/orange-alpha.css',
-          'apps/web/node_modules/@radix-ui/colors/red.css',
-          'apps/web/node_modules/@radix-ui/colors/red-alpha.css',
-          'apps/web/node_modules/@radix-ui/colors/black-alpha.css',
-        ],
+        importFrom: ['src/styles/tokens.css'],
       },
     ],
     'a11y/no-outline-none': true,

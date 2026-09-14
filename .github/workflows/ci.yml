@@ -1,17 +1,6 @@
-# The fast local signal on every PR. Runs in parallel with the preview
-# deploy in pr-preview.yml rather than waiting on it, because this job
-# needs no AWS credentials and leaves nothing behind server-side — so
-# cancelling an in-progress run when a new commit lands is always safe.
-#
-# `pnpm verify` is used here rather than `pnpm -r run typecheck`: the
-# recursive form only runs each package's own typecheck script and
-# silently skips the e2e specs, which live in the root-only
-# tsconfig.e2e.json project and are only covered by the root
-# `pnpm typecheck` (see package.json).
-
 name: CI
 
-on: pull_request
+on: { pull_request: {}, push: { branches: [main] } }
 
 concurrency:
   group: ci-${{ github.ref }}

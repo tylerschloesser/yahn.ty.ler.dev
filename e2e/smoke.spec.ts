@@ -1,22 +1,20 @@
 import { expect, test } from './fixtures.js'
 
 /**
- * The vertical slice, asserted structurally.
- *
- * These run against live Hacker News — locally via the `webServer` in
- * `playwright.config.ts`, or against a deployed preview when
- * `PLAYWRIGHT_BASE_URL` is set. The front page changes under the test, so
- * nothing here asserts *what* a story says: only that a feed of story rows
- * renders, that each row carries the parts HN's own layout has, and that
- * clicking through yields a real comment tree.
+ * The vertical slice, asserted structurally, plus the API health check.
+ * These three are the `@smoke` subset (`.claude/rules/testing.md`): what a
+ * preview-deploy check runs, so keep it fast and dependency-free.
  *
  * Content is used to *choose* what to click (the busiest thread, so the tree
- * assertions have something to find) and never to assert.
+ * assertions have something to find) and never to assert — this suite runs
+ * against `HN_SOURCE=fixture` (`.claude/rules/testing.md`), so nothing here
+ * assumes a specific story or comment beyond what the front page happens to
+ * serve.
  */
 
 const story = '[data-testid="story"]'
 
-test('the front page renders a feed of story rows', async ({ page }) => {
+test('the front page renders a feed of story rows @smoke', async ({ page }) => {
   await page.goto('/')
 
   const rows = page.locator(story)
@@ -32,7 +30,7 @@ test('the front page renders a feed of story rows', async ({ page }) => {
   expect(await rows.locator('[data-testid="story-score"]').count()).toBeGreaterThan(20)
 })
 
-test('a story opens a nested comment tree', async ({ page }) => {
+test('a story opens a nested comment tree @smoke', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator(story).first()).toBeVisible()
 
@@ -58,6 +56,11 @@ test('a story opens a nested comment tree', async ({ page }) => {
   await expect(page.locator('[data-testid="story-title"]')).toHaveCount(1)
 
   // The tree, not a flat list: at least one comment nested inside another.
-  // The busiest thread on HN's front page always has replies.
+  // The busiest thread on the fixtured front page always has replies.
   await expect(page.locator('[data-testid="comment"] [data-testid="comment"]').first()).toBeVisible()
+})
+
+test('GET /api/health responds 200 @smoke', async ({ request }) => {
+  const response = await request.get('/api/health')
+  expect(response.status()).toBe(200)
 })

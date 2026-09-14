@@ -1,13 +1,20 @@
-import { expect, test } from './fixtures.js'
+import { expect, test, TARGET } from './fixtures.js'
+import { readManifest } from './hn-fixture.js'
 import type { Page } from '@playwright/test'
 
 /**
- * Thread-level behaviour: collapsing a subtree, and HN's own URL shape.
+ * Thread-level behaviour: collapsing a subtree, HN's own URL shape, and (for
+ * `TARGET === 'local'` only) two assertions pinned to the recorded fixture
+ * manifest, where exact ids are safe to assert on.
  *
- * The thread is chosen by content (the busiest one on the front page) and
- * asserted structurally — picking is not asserting. A fixed item id would be
- * the tempting alternative and is the wrong one: it would pass forever without
- * proving that today's HN still renders.
+ * The three ported tests below choose their thread by content (the busiest
+ * one on the front page) and assert structurally — picking is not asserting.
+ * A fixed item id would be the tempting alternative and is the wrong one for
+ * *those* tests: it would pass forever without proving that the fixtured
+ * front page still links to a real thread. The two fixture-content tests are
+ * different in kind — they exist specifically to check the recorded manifest
+ * against what the fixtured server actually serves, so a fixed id is the
+ * point there.
  */
 
 const story = '[data-testid="story"]'
@@ -82,4 +89,37 @@ test('a comment byline links to its author', async ({ page }) => {
   await page.locator(`${comment} [data-testid="comment-author"]`).first().click()
   await expect(page).toHaveURL(/\/user\/.+$/)
   await expect(page.getByTestId('user-karma')).toBeVisible()
+})
+
+// Fixture-content assertions: only meaningful against the recorded manifest
+// behind `HN_SOURCE=fixture`, so they run for TARGET === 'local' only
+// (`playwright.config.ts` boots `pnpm dev:e2e` for that target).
+test.describe(() => {
+  test.skip(TARGET !== 'local', 'fixture manifest ids are only guaranteed to match the local fixtured server')
+
+  test('the recorded deep thread shows its tombstoned comment', async ({ page }) => {
+    const manifest = readManifest()
+
+    await page.goto(`/item/${manifest.threads.deep}`)
+    await expect(page.locator(comment).first()).toBeVisible()
+
+    const tombstoned = page.locator(`[data-comment-id="${manifest.tombstoneId}"]`)
+    await expect(tombstoned).toBeVisible()
+    await expect(tombstoned).toHaveAttribute('data-tombstone', '')
+  })
+
+  test('the recorded shallow thread renders its comments under one story title', async ({ page }) => {
+    const manifest = readManifest()
+
+    await page.goto(`/item/${manifest.threads.shallow}`)
+    await expect(page.locator(comment).first()).toBeVisible()
+
+    // Recorded as shallow, not empty: between 1 and 30 comments, all under a
+    // single story title — proof the item page rendered, not that the tree
+    // is flat.
+    const count = await page.locator(comment).count()
+    expect(count).toBeGreaterThanOrEqual(1)
+    expect(count).toBeLessThanOrEqual(30)
+    await expect(page.locator('[data-testid="story-title"]')).toHaveCount(1)
+  })
 })

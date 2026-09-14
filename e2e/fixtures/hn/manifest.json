@@ -1,0 +1,21 @@
+{
+  "recordedAt": "2026-09-14T00:05:34.751Z",
+  "feeds": {
+    "new": 30,
+    "best": 30,
+    "ask": 23,
+    "show": 30,
+    "job": 30,
+    "top": 60
+  },
+  "threads": {
+    "deep": 49686697,
+    "shallow": 49689048
+  },
+  "tombstoneId": 49688378,
+  "user": "mikhael",
+  "search": {
+    "query": "Global shortage has led to motor oil rationing at Costco",
+    "emptyQuery": "zzz-no-hits-1789344325118-r5e46wuua8r"
+  }
+}
