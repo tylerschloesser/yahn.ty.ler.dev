@@ -96,7 +96,7 @@
  * as an error. `--color-text` against `--color-text-strong` is the axis:
  * the same one `.tombstoneText` above already uses, not a danger color.
  */
-[data-tombstone='dead'] .author,
-[data-tombstone='dead'] .body {
+[data-dead] .author,
+[data-dead] .body {
   color: var(--color-text);
 }

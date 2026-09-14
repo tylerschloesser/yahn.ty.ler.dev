@@ -72,7 +72,8 @@ export function CommentNode({ comment, depth, descendantCounts }: CommentNodePro
     <article
       data-testid="comment"
       data-comment-id={comment.id}
-      {...(tombstone ? { 'data-tombstone': tombstone } : {})}
+      {...(tombstone ? { 'data-tombstone': '' } : {})}
+      {...(tombstone === 'dead' ? { 'data-dead': '' } : {})}
     >
       <Collapsible.Root className={styles.comment} defaultOpen onOpenChange={setOpen}>
         <div className={styles.meta}>
