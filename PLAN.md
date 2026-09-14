@@ -131,7 +131,8 @@ no context.
   empty input): `lint` passes `--allow-empty-input` to stylelint; `tsconfig.server.json` and
   `tsconfig.e2e.json` add `"files": []` to avoid TS18003. Both stay. `typecheck` temporarily skips `cmk`
   while no `*.module.css` exists (cmk errors on zero files, with no flag to suppress it). **The manager
-  restores `typecheck` to exactly `cmk -p tsconfig.app.json && tsc -b` at G2**, once C8 lands module CSS.
+  restores `typecheck` to exactly `cmk -p tsconfig.app.json && tsc -b` at G2**, once C8 lands module CSS
+  (done in wave 2).
 - **Amended in wave 1:** `lint:imports` as written exits 0 whenever one of its directories is missing,
   because grep exits 2 and `!` negates that, so it silently passes real violations. It is now
   `! grep -rnsE "<same pattern>" api server shared scripts | grep .`, which fails exactly when a line
@@ -242,7 +243,10 @@ no context.
   `applyLocalDefaults()`. `server/dev.ts`: one `serve()` on 3001. `api/index.ts`: exactly as in §1.
 - **Edits — tests:** a feed 200 has `s-maxage=30` and the tag; `NotFoundError` → 404, `UpstreamError` →
   502, a bad feed → 400, all `no-store`; an unknown `/api/v1/x` → 404 JSON.
-- **Check:** `pnpm exec vitest run server/app.test.ts && pnpm typecheck && pnpm lint:imports && ! grep -rniE "auth|/me'|aws" server/app.ts server/env.ts`
+- **Check:** `pnpm exec vitest run server/app.test.ts && pnpm typecheck && pnpm lint:imports && ! grep -rniE "\bauth\b|getauthuser|/me'|aws" server/app.ts server/env.ts`
+- **Amended in wave 2:** the check's grep was `"auth|/me'|aws"`, which matches `author`. The ported
+  author-items route (A5) needs `getAuthorItems`, so the grep now matches `auth` only as a whole word
+  or in `getAuthUser`.
 
 ### C8 · Port the web app (wave 2)
 - **Agent:** implementer → verifier. One implementer covers all of `src/`.

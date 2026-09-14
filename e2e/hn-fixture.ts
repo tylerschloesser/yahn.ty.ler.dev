@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 export interface HnManifest {
   /** ISO timestamp of the recording run. */
   readonly recordedAt: string
-  /** Feed name -> the number of ids recorded for it (30+, so page 2 exists). */
+  /** Feed name -> the number of ids recorded for it (`top` 60, so page 2 exists; others up to 30). */
   readonly feeds: Readonly<Record<string, number>>
   /** Two recorded thread ids: one deep with a tombstoned comment, one shallow (5–30 comments). */
   readonly threads: {

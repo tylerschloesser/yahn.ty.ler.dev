@@ -17,6 +17,17 @@ function positiveInt(name: string, fallback: number): number {
 
 export const env = {
   /**
+   * 'live' (default) talks to the real Firebase/Algolia hosts. 'fixture'
+   * swaps `server/hn/http.ts`'s `fetchJson` transport for one that reads
+   * `e2e/fixtures/hn/{firebase,algolia}.json` instead — see
+   * `.claude/rules/hn-data.md` and `.claude/rules/testing.md`. Every client,
+   * normalizer and tree walk above that seam runs unchanged either way.
+   */
+  get hnSource(): 'live' | 'fixture' {
+    return choice('HN_SOURCE', ['live', 'fixture'], 'live')
+  },
+
+  /**
    * Which path builds a comment tree. 'firebase' walks Firebase directly —
    * one request per node, but `kids` is HN's ranked display order. 'hybrid'
    * takes Algolia's whole nested tree in one request and merges Firebase's

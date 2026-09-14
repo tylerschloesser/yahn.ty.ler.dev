@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"tsx watch server/dev.ts\"",
     "dev:e2e": "HN_SOURCE=fixture concurrently \"vite\" \"tsx watch server/dev.ts\"",
-    "typecheck": "! find src generated/src shared -type f -name '*.module.css' 2>/dev/null | grep -q . || cmk -p tsconfig.app.json && tsc -b",
+    "typecheck": "cmk -p tsconfig.app.json && tsc -b",
     "test": "vitest run --passWithNoTests",
     "build": "pnpm typecheck && vite build",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && vite build",

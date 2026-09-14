@@ -1,0 +1,28 @@
+.pagination {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2);
+}
+
+.pageLink {
+  color: var(--color-accent-text);
+  text-decoration: none;
+  border-radius: var(--radius-1);
+}
+
+@media (hover: hover) {
+  .pageLink:not([data-disabled]):hover {
+    text-decoration: underline;
+  }
+}
+
+.pageLink[data-disabled] {
+  color: var(--color-border);
+  cursor: default;
+}
+
+.pageStatus {
+  color: var(--color-text);
+}

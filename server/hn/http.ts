@@ -1,7 +1,27 @@
 import { env } from './env.js'
 import { UpstreamError } from './errors.js'
+import { fixtureTransport } from './fixture/transport.js'
 
 export type JsonResult<T> = { status: number; body: T | null; etag: string | null }
+
+export type Transport = (
+  url: string,
+  headers: Record<string, string> | undefined,
+) => Promise<{ status: number; body: unknown; etag: string | null }>
+
+let transportOverride: Transport | undefined
+
+/**
+ * Test/recording seam: replaces what `fetchJson` calls for every request in
+ * this process, ahead of `env.hnSource`, and bypasses retry/backoff entirely
+ * — the override owns its own error handling. `scripts/record-hn-fixtures.ts`
+ * sets this to a transport that hits live HN and records what it sees; pass
+ * `undefined` to restore the default (`env.hnSource`-driven) behaviour.
+ * Production code never calls this.
+ */
+export function setTransport(transport: Transport | undefined): void {
+  transportOverride = transport
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -25,6 +45,16 @@ export async function fetchJson<T>(
   url: string,
   options?: { headers?: Record<string, string>; timeoutMs?: number; retries?: number },
 ): Promise<JsonResult<T>> {
+  if (transportOverride) {
+    const result = await transportOverride(url, options?.headers)
+    return result as JsonResult<T>
+  }
+
+  if (env.hnSource === 'fixture') {
+    const result = await fixtureTransport(url)
+    return result as JsonResult<T>
+  }
+
   const timeoutMs = options?.timeoutMs ?? env.httpTimeoutMs
   const retries = options?.retries ?? 2
 
