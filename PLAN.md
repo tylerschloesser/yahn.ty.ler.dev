@@ -292,6 +292,8 @@ no context.
   `x-vercel-set-bypass-cookie: true` are current
   (vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation).
   The docs say nothing on whether the bypass header affects caching, so §6 item 3 stays the empirical test.
+- **Amended in wave 4:** main's `ci.yml` runs `on: pull_request` only, which would make §6 item 6 ("CI on
+  `main` is green after the merge") impossible. `ci.yml` therefore also runs on `push` to `main`.
 - **Check:** `node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8'))" && grep -q deployment_status .github/workflows/preview-smoke.yml && grep -q 'pnpm verify' .github/workflows/ci.yml && ! ls .github/workflows | grep -qE 'deploy|pr-preview|teardown|cleanup'`
 
 ### C11 · Context refresh and README (wave 4)

@@ -29,14 +29,24 @@ and error mapping.
 ## Playwright
 
 `fullyParallel`, `workers: CI ? 2 : undefined`, `retries: CI ? 1 : 0`, `expect.timeout: 5000`.
-Two projects: `chromium` (the whole suite except `e2e/live/**`) and `live` (only `e2e/live/**`,
+Two projects: `chromium` (the whole suite except `e2e/live/`) and `live` (only `e2e/live/`,
 against real HN). `TARGET` is `local` (no `PLAYWRIGHT_BASE_URL`) or `remote` (set) — there is no
 auth and no per-target credential in this epoch.
 
 - **`HN_SOURCE=fixture` is the seam, not a mock server.** `pnpm dev:e2e` and the `chromium`
   project run the real HN clients, normalizers, and tree walk — only `server/hn/http.ts`'s
-  `fetchJson` is swapped for a fixture-file reader. An unrecorded URL throws `UpstreamError`
-  naming it, surfacing as a 502; that means a missing fixture, not a bug in the walk.
+  `fetchJson` is swapped for `server/hn/fixture/transport.ts` reading
+  `e2e/fixtures/hn/{firebase,algolia,manifest}.json`. An unrecorded URL throws `UpstreamError`
+  naming it, surfacing as a 502; that means a missing fixture, not a bug in the walk. Re-record
+  with `pnpm hn:record` (`.claude/skills/record-hn-fixtures/SKILL.md`) — every recorded body is
+  verbatim except the `top` feed list, which is deliberately reordered (the deep thread forced to
+  rank 1, the shallow thread also on page 1) so specs can open a guaranteed-busy thread.
+- `playwright.config.ts`'s `webServer.command` is `pnpm dev` when `HN_SOURCE=live`, else
+  `pnpm dev:e2e` — `pnpm e2e:live` sets `HN_SOURCE=live` for exactly this reason.
+- **A test that reads the fixture manifest runs only under `test.skip(TARGET !== 'local')`** —
+  a manifest id (a thread, a tombstone comment, a user) is only guaranteed to exist against the
+  local fixtured server. `@smoke` stays content-free for the same reason: the preview-smoke
+  workflow runs it against a real deployment backed by live HN.
 - **Write the spec before the UI it covers.** The `data-testid` set becomes a contract the
   component is built against — that is why specs survive a component rewrite untouched.
 - **Assertions are structural, never content-based**, even against fixtures: "30 rows, each with
@@ -49,8 +59,9 @@ auth and no per-target credential in this epoch.
   class or `hidden`. Boolean `data-*` is for CSS; an ARIA state is the better test contract.
 - Three specs are tagged `@smoke` (rows render, a thread opens, `/api/health` is 200) — that
   subset is what a preview-deploy check runs, so keep it fast and dependency-free.
-- **The suite has a one-minute budget.** If a run exceeds it, fix the cause — a slow wait, a
-  stray live call — never the timeouts.
+- **The suite has a one-minute budget** — in practice the local run is about 10s for all 15
+  tests. If a run exceeds 60s, fix the cause — a slow wait, a stray live call — never the
+  timeouts.
 - **`pnpm e2e -- e2e/x.spec.ts` does not filter** — the `--` is swallowed and the whole suite
   runs. `pnpm e2e e2e/x.spec.ts` is the form that works.
 - When `VERCEL_AUTOMATION_BYPASS_SECRET` is set, `playwright.config.ts` sends the bypass header

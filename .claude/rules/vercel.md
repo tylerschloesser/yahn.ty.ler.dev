@@ -33,6 +33,11 @@ correctly under `nodenext`, tsx, vitest, and Vite alike. **TypeScript errors do 
 build** — this is why `pnpm build` runs `pnpm typecheck` first; an import that only breaks at
 runtime is otherwise invisible until the deploy.
 
+**`lint:imports` is `! grep -rnsE "from '\.\.?/[^']*\.tsx?'" api server shared scripts | grep .`**
+— the trailing `| grep .` is load-bearing. A bare `! grep -rns ...` exits 0 whenever one of those
+four directories is missing (grep itself exits 2, and `!` negates that), so it would silently
+pass real `.ts`-specifier violations instead of catching them.
+
 Plan **Hobby**, region **iad1**, Node **24.x** (Vercel honours `engines.node`), function ceiling
 **300s** — well inside it is `server/hn`'s worst measured case (6.5s), which was measured rather
 than assumed because tail latency there is real (`.claude/rules/hn-data.md`).
@@ -68,3 +73,12 @@ for a future on-demand purge; nothing calls the purge API in this epoch.
 `vercel link` writes a settings-only `pnpm-workspace.yaml` (no `packages:` key), just so pnpm
 will prompt `pnpm approve-builds` for esbuild. This does not make the repo a workspace — there is
 still exactly one `package.json`, at the root.
+
+## Project and CI
+
+The Vercel project is `yahn`, Git-connected, deploying on every push with no manual `vercel`
+command; the production branch is `main` (PLAN.md M1–M2). `ci.yml` (on pull requests and pushes to `main`) runs
+`pnpm verify` then `pnpm e2e`. `preview-smoke.yml` (on `deployment_status`, `state == 'success'`,
+non-Production environments only) runs `pnpm e2e --grep @smoke` against the deployment's own URL
+with `VERCEL_AUTOMATION_BYPASS_SECRET` set, which is what makes `playwright.config.ts` add the
+bypass header automatically.

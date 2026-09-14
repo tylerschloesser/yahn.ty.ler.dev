@@ -22,6 +22,9 @@ config.
 - **A boolean `data-*` attribute is `data-x=""` when true and absent when false**, written
   `{...(flag ? { 'data-x': '' } : {})}`. `data-x={true}` renders `data-x="true"`, which the CSS
   `[data-x]` selector still matches but a Playwright `toHaveAttribute('data-x', '')` does not.
+  `CommentTree` renders both independently: `data-tombstone` on any tombstone (deleted or dead)
+  plus a separate `data-dead` only when it's the dead one, for the dimmed style — two booleans on
+  the same element, not one enum.
 - **One token layer.** `src/styles/tokens.css` holds every custom property components use
   (`--color-text`, `--color-accent`, the space and type scales, two radii) as hand-written HN
   literals (`#ff6600`, `#f6f6ef`, `#828282`) — there is no third-party color system underneath.
@@ -30,11 +33,13 @@ config.
 - **Dark mode is `@media (prefers-color-scheme: dark)` in `tokens.css`, with no pre-paint
   script.** There is deliberately no inline theme script in `index.html` in this epoch.
 - stylelint rejects hex/rgb/hsl on colour properties and raw px on spacing/radius properties, in
-  `*.module.css` only — `src/styles/**` is the token layer and may use literals. It does not
+  `*.module.css` only — `src/styles/` is the token layer and may use literals. It does not
   reject px on `border`, `width`, `height`, or `outline`.
 - **Class names are type-checked.** `cmk` writes `.d.ts` into `generated/` during `typecheck` and
   `build`; `styles.typo` is a compile error — do not add an index signature to work around it.
-  `generated/` is gitignored and not pruned by `cmk`. The `PreToolUse` hook in
+  `generated/` is gitignored and not pruned by `cmk`. `cmk` also errors if it finds zero
+  `*.module.css` files, with no flag to suppress it — moot while `src/components/` has plenty,
+  but it will bite again if they're ever all removed at once. The `PreToolUse` hook in
   `.claude/settings.json` refuses `Edit`/`Write` on it and on `src/routeTree.gen.ts` directly —
   regenerate them, don't hand-edit them.
 - **Accessibility is a requirement, not a final pass.** oxlint's `jsx-a11y` plugin runs at

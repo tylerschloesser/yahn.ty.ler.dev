@@ -51,5 +51,5 @@ Loaded when you touch the API or the shared schema.
 - `ItemResponse.source` names the path that actually produced the tree, not the configured one,
   and `truncated` says the tree is a prefix. A client that hides either is lying about the thread.
 - The `enrichments` slot on an item stays optional and loose; nothing populates it yet. Do not
-  build `server/enrich/**`, `server/jobs/**`, or `server/store/**` — they belong to Epoch 2 and do
-  not exist in this repo yet.
+  build server/enrich, server/jobs, or server/store — they belong to Epoch 2 and do not exist in
+  this repo yet.

@@ -1,32 +1,40 @@
-# React + TypeScript + Vite
+# yahn.ty.ler.dev
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A read-only Hacker News client: a Hono API (`api/index.ts`, `server/`) and a Vite + React SPA
+(`src/`), one package, deployed on Vercel. `CLAUDE.md` and `.claude/rules/` hold the conventions.
 
-Currently, two official plugins are available:
+## Develop
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+pnpm install
+pnpm dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Runs the real API on `:3001` and Vite on `:5173`. No credentials needed — both HN APIs are
+public — but it does hit live HN, so be a good citizen with it.
+
+## Test
+
+```
+pnpm verify   # lint, typecheck, unit tests, build — what CI runs first
+pnpm e2e      # Playwright against recorded HN fixtures (HN_SOURCE=fixture), ~10s
+pnpm e2e:live # structural canary (e2e/live/) against live HN
+```
+
+## Fixtures
+
+The e2e suite runs against `e2e/fixtures/hn/*.json`, recorded HN responses, not live traffic.
+Re-record them after a schema or spec change:
+
+```
+pnpm hn:record
+```
+
+See `.claude/skills/record-hn-fixtures/SKILL.md` for what it captures and when a re-record is
+actually needed.
+
+## Deploy
+
+Vercel's Git integration deploys every push to this repo; the production branch is `main`. Every
+deployment, production included, sits behind Vercel Authentication, so a remote check needs
+`x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET` — see `.claude/rules/vercel.md`.
